@@ -65,9 +65,9 @@ Proposta:
 
 | Node | Papel | Workloads |
 |---|---|---|
-| **node-01** (nova máquina forte) | Compute primário | Coolify, apps de produção, PBS-datastore |
-| **node-02** (nova máquina forte) | Compute secundário | Workloads dev/lab, k8s nodes, NixOS VMs |
-| **node-03** (Beelink) | Compute light + serviços de infra leves | DNS interno, Adguard, ops LXC, segunda réplica cloudflared para tunnel HA |
+| **pve01** (nova máquina forte) | Compute primário | Coolify, apps de produção, PBS-datastore |
+| **pve02** (nova máquina forte) | Compute secundário | Workloads dev/lab, k8s nodes, NixOS VMs |
+| **pve03** (Beelink) | Compute light + serviços de infra leves | DNS interno, Adguard, ops LXC, segunda réplica cloudflared para tunnel HA |
 
 O Beelink fica útil mas não-crítico. Quando morrer, basta tirá-lo do cluster.
 
@@ -75,8 +75,8 @@ O Beelink fica útil mas não-crítico. Quando morrer, basta tirá-lo do cluster
 
 ### Fase 0 — Antes das máquinas chegarem (faz agora)
 
-- [ ] Decidir hostnames (sugiro: `pve01`, `pve02`, `pve03`)
-- [ ] Reservar IPs estáticos no router para os 3 nodes (sugiro: `.51`, `.52`, manter `.53`)
+- [ ] Hostnames decididos: **pve01** (nova), **pve02** (nova), **pve03** (Beelink)
+- [ ] IPs estáticos reservados no router: **pve01=192.168.50.51**, **pve02=192.168.50.52**, **pve03=192.168.50.53** (Beelink mantém-se)
 - [ ] Definir VLANs (mesmo só uma, marca como tagged em vmbr0 para futuro)
 - [ ] Confirmar que router tem DHCP fora do range planeado
 - [ ] Backup verificado da config actual do Beelink: `/etc/pve` + `vzdump` de 200 e 101
@@ -114,7 +114,7 @@ pvecm add <IP_do_primeiro> --link0 <ip_local>
 - [ ] Em PVE: Datacenter → Storage → Add ZFS → pool `tank`, content `images, rootdir`
 - [ ] Optional: enable replication entre nodes (Datacenter → Replication) - async, RPO 15 min default
 - [ ] Setup PBS:
-  - Cria LXC `pbs` em `node-01`, Debian 13, 2c/4G/100G (ou maior)
+  - Cria LXC `pbs` em `pve01`, Debian 13, 2c/4G/100G (ou maior)
   - Datastore num dataset ZFS dedicado: `zfs create tank/pbs-store`
   - `apt install proxmox-backup-server`, configura datastore via UI
   - Adiciona como storage `pbs-main` no datacenter PVE
@@ -126,8 +126,8 @@ Opções:
 
 **4a) Live migration** (se os 3 nodes estão no cluster e Coolify está em ZFS replicado):
 ```bash
-pct migrate 200 node-01 --online --with-local-disks --target-storage local-zfs
-pct migrate 101 node-03 --online --with-local-disks --target-storage local-zfs
+pct migrate 200 pve01 --online --with-local-disks --target-storage local-zfs
+pct migrate 101 pve03 --online --with-local-disks --target-storage local-zfs
 ```
 
 **4b) Stop+backup+restore** (mais seguro, downtime ~10 min):
