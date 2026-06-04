@@ -1,0 +1,11 @@
+*.auto.tfvars
+*_override.tf
+*_override.tf.json
+.bw-provider-state
+.envrc
+.terraform/
+crash.*.log
+crash.log
+override.tf
+override.tf.json
+terraform.tfvars

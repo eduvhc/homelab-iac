@@ -1,0 +1,13 @@
+# Copy to .envrc and fill BW_ORGANIZATION_ID. source it before tofu commands.
+
+# OpenTofu provider env vars
+export BW_ACCESS_TOKEN="$(cat /root/.bws-token)"
+export BW_ORGANIZATION_ID="REPLACE_WITH_BWS_ORG_ID"
+export BW_API_URL="https://api.bitwarden.com"
+export BW_IDENTITY_API_URL="https://identity.bitwarden.com"
+
+# bws CLI uses a different env var name (BWS_ prefix)
+export BWS_ACCESS_TOKEN="$BW_ACCESS_TOKEN"
+
+# State passphrase fetched via bws CLI - chicken-egg with the encryption block.
+export TF_VAR_tf_state_passphrase="$(bws secret list --output json | jq -r '.[] | select(.key=="TOFU_STATE_PASSPHRASE") | .value')"
