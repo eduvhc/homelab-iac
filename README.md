@@ -10,6 +10,11 @@ coolify.iedora.com  -> CF tunnel -> http://localhost:8000  (Coolify UI)
 *.iedora.com        -> CF tunnel -> http://localhost:80    (Traefik in Coolify)
 ```
 
+## Docs
+
+- [3-node migration plan](docs/3-node-plan.md) - playbook for when 2 new machines arrive
+
+
 State and plan are AES-GCM encrypted with a PBKDF2-derived key.
 The encrypted terraform.tfstate IS committed to this public repo.
 Recovery requires the BWS access token + state passphrase (also in BWS).
