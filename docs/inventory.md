@@ -22,6 +22,10 @@ Tags are layered by intent:
   - infra: `iac`, `dns`, `sso`, future `vpn`, `backup`, ...
   - coolify: `control-plane`, `runtime`
 
+
+
+**PVE display order:** `/etc/pve/datacenter.cfg` has `tag-style: ordering=config`, so the UI shows tags in the order they are written (not alphabetically). Always write tags as broader-category-first then specific-subfunction (e.g. `infra;dns`, `coolify;runtime`).
+
 When adding a new LXC, pick one category + one sub-function tag. If neither fits, add a new sub-function tag rather than overloading existing ones.
 
 ## Hostname conventions
