@@ -15,10 +15,10 @@ output "tunnel_token" {
 
 output "lxc_ips" {
   value       = local.ips
-  description = "Map of LXC name -> IP address. Useful for shell scripts: tofu output -json lxc_ips | jq -r .coolify"
+  description = "Map of LXC name -> IP address. Useful for shell scripts AND for the platform stack via terraform_remote_state."
 }
 
-output "coolify_runner_public_key" {
-  value       = trimspace(tls_private_key.coolify_runner_key.public_key_openssh)
-  description = "ED25519 public key that Coolify uses to SSH into runners. If a runner LXC ever loses its authorized_keys, paste this back in."
+output "coolify_api_url" {
+  value       = local.coolify_api_url
+  description = "Internal HTTP URL of the Coolify API. Consumed by the platform stack."
 }

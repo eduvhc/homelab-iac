@@ -22,12 +22,19 @@ bypasses the tunnel for latency.
 ## Layout
 
 ```
-iac/                       OpenTofu stack (CF tunnel + DNS + Coolify server resource)
+iac/stacks/infra/          OpenTofu stack: PVE LXCs (bpg) + CF tunnel + DNS
+iac/stacks/platform/       OpenTofu stack: Coolify-side API objects (runners, keys).
+                           Reads infra outputs via terraform_remote_state.
 configs/<svc>/             Config files for each service LXC
 configs/<svc>/scripts/     bootstrap.sh (one-time setup) + sync.sh (push config + reload)
 docs/                      How-to docs (setup-from-scratch, inventory, 3-node-plan)
 references/                Upstream source as shallow git submodules (for grep + reading)
 ```
+
+The split is by **dependency boundary**: `infra` has no application-layer
+dependencies and can apply against a clean PVE; `platform` needs Coolify
+already running with an API token in BWS. This lets each stack be applied
+without `-target=` flags.
 
 ## Quickstart
 
@@ -37,14 +44,16 @@ references/                Upstream source as shallow git submodules (for grep +
 
 | What you want to do | Where you edit | What you run |
 |---|---|---|
-| Add/change Cloudflare DNS or tunnel route | `iac/coolify.tf` (will be renamed `iac/tunnel.tf` again later) | `cd iac && tofu apply` |
-| Add a Coolify runner server | `iac/coolify.tf` | `cd iac && tofu apply` |
+| Add/change LXC sizing or a new LXC | `iac/stacks/infra/locals.tf` | `cd iac/stacks/infra && tofu apply` |
+| Cloudflare DNS or tunnel ingress route | `iac/stacks/infra/tunnel.tf` | `cd iac/stacks/infra && tofu apply` |
+| Add a Coolify runner server | `iac/stacks/platform/runner.tf` | `cd iac/stacks/platform && tofu apply` |
 | Edit AdGuard rewrites/filters | `configs/adguard/AdGuardHome.yaml` | `configs/adguard/scripts/sync.sh` |
 | Add an Authelia OIDC client | `configs/authelia/configuration.yml` | `configs/authelia/scripts/sync.sh` |
 | Add a Caddy reverse proxy entry | `configs/gateway/Caddyfile` | `configs/gateway/scripts/sync.sh` |
 | Rotate the Coolify API token | (nothing in code) | `configs/coolify/scripts/bootstrap.sh` |
 
-After any of these: `git add … && git commit && git push`.
+Both tofu stacks share `iac/.envrc` (one `source` covers both). After any of
+the above: `git add … && git commit && git push`.
 
 ## Secrets
 
@@ -56,16 +65,17 @@ Secret names used:
 
 | Key | Used by | Who creates it |
 |---|---|---|
-| `TOFU_STATE_PASSPHRASE` | `iac/.envrc` (state encryption) | operator (one time) |
-| `CLOUDFLARE_API_TOKEN` | tofu cloudflare provider | operator (one time) |
+| `TOFU_STATE_PASSPHRASE` | `iac/.envrc` (state encryption, both stacks) | operator (one time) |
+| `CLOUDFLARE_API_TOKEN` | infra stack: cloudflare provider | operator (one time) |
+| `PVE_API_TOKEN` | infra stack: bpg/proxmox provider | operator (one time, via `pveum`) |
 | `IEDORA_ADMIN_NAME` (shared) | `configs/coolify/scripts/bootstrap.sh` | operator (one time) |
 | `IEDORA_ADMIN_EMAIL` (shared) | same | operator (one time) |
 | `IEDORA_ADMIN_PASSWORD` (shared with Authelia) | same | operator (one time) |
-| `COOLIFY_API_TOKEN` | tofu (server resource) | `configs/coolify/scripts/bootstrap.sh` (rotates) |
+| `COOLIFY_API_TOKEN` | platform stack: terraform_data registrations | `configs/coolify/scripts/bootstrap.sh` (rotates) |
 
-Nothing sensitive is committed to git. The OpenTofu state file
-(`iac/terraform.tfstate`) is committed but PBKDF2-AES-GCM encrypted with
-`TOFU_STATE_PASSPHRASE`.
+Nothing sensitive is committed to git. Both OpenTofu state files
+(`iac/stacks/{infra,platform}/terraform.tfstate`) are committed but
+PBKDF2-AES-GCM encrypted with `TOFU_STATE_PASSPHRASE`.
 
 ## Docs
 
@@ -85,8 +95,8 @@ human or agent can read source locally:
 | `coolify-docs` | LXC 200 (docs source) |
 | `opentofu` | LXC 101 |
 | `cloudflared` | LXC 200 |
-| `terraform-provider-cloudflare` | provider in `iac/providers.tf` |
-| `terraform-provider-bitwarden-secrets` | same |
+| `terraform-provider-cloudflare` | infra stack |
+| `terraform-provider-bitwarden-secrets` | both stacks |
 | `bitwarden-sdk-sm` | bws CLI in LXC 101 |
 | `authelia` | LXC 103 |
 | `caddy` | LXC 103 |

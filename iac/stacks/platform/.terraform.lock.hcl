@@ -20,8 +20,7 @@ provider "registry.opentofu.org/bitwarden/bitwarden-secrets" {
 }
 
 provider "registry.opentofu.org/bpg/proxmox" {
-  version     = "0.108.0"
-  constraints = "~> 0.94"
+  version = "0.108.0"
   hashes = [
     "h1:5bhFKUOtL0lTzhp+U0tljwnTm9ML9fQFdpMi7Esc+go=",
     "h1:5rjI1oYVsT/1wHe/60zpcCVPvDJrGkbBGPxvld9l+ro=",
@@ -54,8 +53,7 @@ provider "registry.opentofu.org/bpg/proxmox" {
 }
 
 provider "registry.opentofu.org/cloudflare/cloudflare" {
-  version     = "5.19.1"
-  constraints = "~> 5.0"
+  version = "5.19.1"
   hashes = [
     "h1:HkKPMZ/n+QiExkRUSLjGMTGnuIaph+k932LiTp7CKZM=",
     "h1:LicdZu3hugYpWuCAprg2EslbVP0zANnV9n9/2KiOnYc=",
@@ -78,8 +76,7 @@ provider "registry.opentofu.org/cloudflare/cloudflare" {
 }
 
 provider "registry.opentofu.org/hashicorp/random" {
-  version     = "3.9.0"
-  constraints = "~> 3.6"
+  version = "3.9.0"
   hashes = [
     "h1:8EQU5KSxezcjo/phRSe69rDOI0lk4pSaggj7FsskYp8=",
     "h1:Lw9im2VBBJQ3RyAbHPQ0rcvcmmcZWm3x+kIOpN+Tv9s=",

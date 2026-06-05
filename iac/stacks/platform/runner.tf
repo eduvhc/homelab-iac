@@ -1,9 +1,10 @@
-# Generate ED25519 keypair for Coolify to use when SSH'ing into runners
+# Generate ED25519 keypair for Coolify to use when SSH'ing into runners.
 resource "tls_private_key" "coolify_runner_key" {
   algorithm = "ED25519"
 }
 
-# Push the public key onto each runner LXC over SSH
+# Push the public key onto each runner LXC over SSH.
+# IPs come from the infra stack via terraform_remote_state.
 resource "terraform_data" "push_pubkey_runner_01" {
   triggers_replace = [tls_private_key.coolify_runner_key.public_key_openssh]
 
@@ -17,10 +18,9 @@ resource "terraform_data" "push_pubkey_runner_01" {
 }
 
 # Create the Coolify private_key + register the server in one provisioner.
-# We bypass the sierrajc provider (bug #95 with sensitive-attr roundtrip)
-# AND avoid the data.external pattern (file-on-disk doesn't survive ops LXC
-# rebuilds). State only tracks whether this was done; UUIDs live only in
-# Coolify. To force re-registration, change a trigger.
+# Bypasses the sierrajc provider (bug #95) and avoids data.external (file-on-disk
+# doesn't survive ops LXC rebuilds). State only tracks whether this was done;
+# UUIDs live only in Coolify. To force re-registration, change a trigger.
 resource "terraform_data" "coolify_runner_01" {
   triggers_replace = [
     tls_private_key.coolify_runner_key.private_key_pem,
@@ -30,6 +30,8 @@ resource "terraform_data" "coolify_runner_01" {
   input = {
     api_token = local.coolify_api_token
     pem       = tls_private_key.coolify_runner_key.private_key_pem
+    ip        = local.ips.coolify_runner_01
+    api_url   = local.coolify_api_url
   }
 
   depends_on = [terraform_data.push_pubkey_runner_01]
@@ -48,16 +50,16 @@ resource "terraform_data" "coolify_runner_01" {
         -H "Authorization: Bearer ${self.input.api_token}" \
         -H "Content-Type: application/json" \
         --data "$KEY_BODY" \
-        ${local.coolify_api_url}/api/v1/security/keys)
+        ${self.input.api_url}/api/v1/security/keys)
       KEY_UUID=$(echo "$KEY_RESP" | jq -r .uuid)
       [ -n "$KEY_UUID" ] && [ "$KEY_UUID" != "null" ] || { echo "ERROR: failed to create key: $KEY_RESP" >&2; exit 1; }
       echo "==> created Coolify private_key uuid=$KEY_UUID"
 
       # 2. Register coolify-runner-01 as a server
-      SRV_BODY=$(jq -nc --arg pk "$KEY_UUID" '{
+      SRV_BODY=$(jq -nc --arg pk "$KEY_UUID" --arg ip "${self.input.ip}" '{
         name: "coolify-runner-01",
         description: "LXC 210. coolify;runtime.",
-        ip: local.ips.coolify_runner_01,
+        ip: $ip,
         port: 22,
         user: "root",
         private_key_uuid: $pk,
@@ -67,7 +69,7 @@ resource "terraform_data" "coolify_runner_01" {
         -H "Authorization: Bearer ${self.input.api_token}" \
         -H "Content-Type: application/json" \
         --data "$SRV_BODY" \
-        ${local.coolify_api_url}/api/v1/servers)
+        ${self.input.api_url}/api/v1/servers)
       SRV_UUID=$(echo "$SRV_RESP" | jq -r .uuid)
       [ -n "$SRV_UUID" ] && [ "$SRV_UUID" != "null" ] || { echo "ERROR: failed to create server: $SRV_RESP" >&2; exit 1; }
       echo "==> registered server uuid=$SRV_UUID"
