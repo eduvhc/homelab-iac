@@ -1,0 +1,38 @@
+# Inventory
+
+Single source of truth for what runs where. Keep in sync with PVE tags
+(`pct set <id> --tags "a;b"`) and hostnames (`pct set <id> --hostname X`).
+
+## LXCs
+
+| ID  | Hostname            | IP                | Tags                 | Purpose |
+|-----|---------------------|-------------------|----------------------|---------|
+| 101 | ops                 | 192.168.50.101    | infra, iac           | OpenTofu, bws, git, sync ops |
+| 102 | adguard             | 192.168.50.30     | infra, dns           | AdGuard Home (DNS + split-DNS rewrites for *.iedora.com) |
+| 103 | gateway             | 192.168.50.40     | infra, sso           | Caddy + Authelia (SSO for homelab admin UIs) |
+| 200 | coolify             | 192.168.50.200    | coolify, control-plane | Coolify UI + cloudflared (CF tunnel terminator) |
+| 210 | coolify-runner-01   | 192.168.50.210    | coolify, runtime     | Docker engine + Traefik for apps deployed via Coolify |
+
+## Tag schema
+
+Tags are layered by intent:
+
+- **Category** (always one): `infra` (supporting services), `coolify` (anything Coolify-related), future: `data` (databases), `obs` (monitoring), etc.
+- **Sub-function** (always one): describes what this specific LXC does inside its category.
+  - infra: `iac`, `dns`, `sso`, future `vpn`, `backup`, ...
+  - coolify: `control-plane`, `runtime`
+
+When adding a new LXC, pick one category + one sub-function tag. If neither fits, add a new sub-function tag rather than overloading existing ones.
+
+## Hostname conventions
+
+- Single-instance services: short purpose name (`ops`, `adguard`, `gateway`, `coolify`).
+- Pooled/scalable services: `<purpose>-<NN>` where NN is zero-padded sequence (`coolify-runner-01`, `coolify-runner-02`, ...). Avoids ambiguous names like `deploy` or `server`.
+
+## Cross-host scaling (future)
+
+When new PVE nodes arrive (see `3-node-plan.md`):
+
+- The Beelink (`pve03`) keeps the infra LXCs (101, 102, 103) — low resource, sticky to a node.
+- `coolify` control plane (200) goes to `pve01`.
+- `coolify-runner-NN` instances spread across `pve01` and `pve02` for capacity. `pve03` can host a runner as a tertiary if needed.
