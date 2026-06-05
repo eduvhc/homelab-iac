@@ -9,7 +9,7 @@ Secrets live in **Bitwarden Secrets Manager**, project `homelab`.
 ```
 iac/                       OpenTofu stack (CF tunnel + DNS, BWS data sources)
 configs/                   Service configs synced to LXCs (AdGuard, Authelia, Caddy)
-scripts/                   sync-adguard.sh, sync-gateway.sh
+(removed - per-service sync.sh in each configs/<svc>/)
 docs/                      3-node-plan.md and other planning docs
 references/                Upstream source as shallow submodules (for reading)
 ```
