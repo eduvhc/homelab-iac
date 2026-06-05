@@ -50,7 +50,7 @@ pct create 101 local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst \
 Inside `ops`:
 ```bash
 # Install toolchain
-apt update && apt install -y curl gnupg git jq ripgrep
+apt update && apt install -y curl gnupg git jq ripgrep unzip python3-yaml
 
 # OpenTofu (apt repo)
 curl -fsSL https://packages.opentofu.org/opentofu/tofu/gpgkey | \
