@@ -38,3 +38,8 @@
 	shallow = true
 	url = https://github.com/authelia/authelia.git
 	branch = master
+[submodule "references/caddy"]
+	path = references/caddy
+	shallow = true
+	url = https://github.com/caddyserver/caddy.git
+	branch = master
