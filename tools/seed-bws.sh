@@ -93,18 +93,19 @@ else
   echo "[new]  CLOUDFLARE_API_TOKEN"
 fi
 
-# --- PVE_API_TOKEN ---
-if bws_has PVE_API_TOKEN; then
-  echo "[skip] PVE_API_TOKEN"
+# --- PVE_ROOT_PASSWORD ---
+# We use root@pam password (not an API token) because PVE has a hardcoded
+# restriction: tokens cannot change non-nesting LXC feature flags (keyctl).
+# Coolify + runner LXCs need keyctl=1 for Docker. privsep=0 tokens were already
+# root-equivalent, so this is the same security posture.
+if bws_has PVE_ROOT_PASSWORD; then
+  echo "[skip] PVE_ROOT_PASSWORD"
 else
   echo
-  echo "On the PVE host, run:"
-  echo "  pveum user token add root@pam tofu --privsep=0"
-  echo "It prints a JSON-ish object with a 'value' field; the full token is:"
-  echo "  root@pam!tofu=<value>"
-  prompt_secret PVE_TOKEN "  Paste the full PVE token (format root@pam!tofu=<uuid>)"
-  bws_create PVE_API_TOKEN "$PVE_TOKEN" "PVE API token for bpg/proxmox provider. Format: root@pam!tofu=<uuid>."
-  echo "[new]  PVE_API_TOKEN"
+  echo "Need the PVE root@pam password (set during PVE install)."
+  prompt_secret PVE_PASS "  PVE root password"
+  bws_create PVE_ROOT_PASSWORD "$PVE_PASS" "PVE root@pam password for bpg/proxmox provider. Required because API tokens cannot set keyctl on LXCs (PVE hardcoded restriction)."
+  echo "[new]  PVE_ROOT_PASSWORD"
 fi
 
 # --- IEDORA_ADMIN_NAME ---

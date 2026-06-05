@@ -1,8 +1,16 @@
 #!/bin/sh
 # Push this folder to the AdGuard LXC and restart services.
 set -e
-cd "$(dirname "$0")/.."
-HOST="root@192.168.50.30"
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+REPO_ROOT=${SCRIPT_DIR%/configs/*}
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# shellcheck disable=SC1091
+. "$REPO_ROOT/iac/.envrc"
+# shellcheck disable=SC1091
+. "$REPO_ROOT/tools/lib/lxc-ips.sh"
+
+cd "$SCRIPT_DIR/.."
+HOST="root@$IP_ADGUARD"
 python3 -c "import yaml; yaml.safe_load(open(\"AdGuardHome.yaml\"))"
 scp -q AdGuardHome.yaml "$HOST:/opt/AdGuardHome/AdGuardHome.yaml"
 scp -q nftables.conf    "$HOST:/etc/nftables.conf"

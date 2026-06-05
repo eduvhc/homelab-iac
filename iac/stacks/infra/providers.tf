@@ -43,9 +43,15 @@ provider "cloudflare" {
 }
 
 provider "proxmox" {
-  endpoint  = "https://192.168.50.53:8006/"
-  api_token = local.pve_api_token
-  insecure  = true
+  endpoint = "https://192.168.50.53:8006/"
+  # Using username + password (not API token) because PVE has a hardcoded
+  # restriction: tokens cannot change LXC feature flags other than `nesting`.
+  # Coolify + runner LXCs need `keyctl=1` for Docker, which requires root@pam.
+  # privsep=0 tokens were already root-equivalent in our setup, so this is
+  # the same posture without the hidden cliff.
+  username = "root@pam"
+  password = local.pve_root_password
+  insecure = true # self-signed cert from PVE installer
 
   ssh {
     agent       = false

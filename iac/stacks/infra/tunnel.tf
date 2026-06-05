@@ -33,11 +33,11 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "coolify" {
       },
       {
         hostname = "auth.${var.domain}"
-        service  = "http://192.168.50.40:80"
+        service  = "http://${local.ips.gateway}:80"
       },
       {
         hostname = "adguard.${var.domain}"
-        service  = "http://192.168.50.40:80"
+        service  = "http://${local.ips.gateway}:80"
       },
       {
         hostname = "*.${var.domain}"

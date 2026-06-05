@@ -23,6 +23,12 @@ resource "proxmox_virtual_environment_container" "lxc" {
     dns {
       servers = ["1.1.1.1", "1.0.0.1"]
     }
+    # On create, install the ops LXC's pubkey so rebuild.sh + sync.sh can SSH in
+    # without manual intervention. ignore_changes (below) prevents post-create
+    # diffs from forcing replacement.
+    user_account {
+      keys = [trimspace(file("/root/.ssh/id_ed25519.pub"))]
+    }
   }
 
   cpu {

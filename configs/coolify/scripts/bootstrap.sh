@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Idempotent bootstrap of a Coolify control plane LXC.
 #
 # Run from an LXC that has: bws CLI + ssh root access to $HOST.

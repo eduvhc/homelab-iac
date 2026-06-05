@@ -14,8 +14,9 @@
 #   - iac/.envrc populated with BW_ORGANIZATION_ID and /root/.bws-token present
 #   - Ops LXC has /root/.ssh/id_ed25519 (key already trusted by PVE root)
 #
-# Re-runs assume each LXC accepts the ops pubkey for SSH. Phase 3 attempts
-# ssh-copy-id once per LXC; manual key trust beforehand is fine too.
+# LXC IPs are NEVER hardcoded here. After Phase 1, tools/lib/lxc-ips.sh
+# reads tofu output and exports IP_ADGUARD / IP_GATEWAY / IP_COOLIFY /
+# IP_RUNNER / ALL_LXC_IPS. Change IPs by editing iac/stacks/infra/locals.tf.
 
 set -e
 
@@ -51,9 +52,18 @@ cd "$INFRA_DIR"
 tofu init -input=false -upgrade=false >/dev/null
 tofu apply -input=false -auto-approve
 
+# Load IPs from tofu output now that infra state is populated.
+# shellcheck disable=SC1091
+. "$REPO_ROOT/tools/lib/lxc-ips.sh"
+sub "IPs loaded: $ALL_LXC_IPS"
+
 # ───────────────────────────────────────────────────────────────────────────────
 step "2/6" "wait for service LXCs to be SSH-reachable"
-for ip in 192.168.50.30 192.168.50.40 192.168.50.200 192.168.50.210; do
+# Clean stale known_hosts entries — LXCs may have been recreated with new host keys.
+for ip in $ALL_LXC_IPS; do
+  ssh-keygen -R "$ip" >/dev/null 2>&1 || true
+done
+for ip in $ALL_LXC_IPS; do
   sub "$ip"
   wait_ssh "$ip"
 done
@@ -61,14 +71,14 @@ done
 # ───────────────────────────────────────────────────────────────────────────────
 step "3/6" "bootstrap service LXCs"
 
-sub "adguard (192.168.50.30): install AGH binary"
-ssh root@192.168.50.30 'sh -s' < "$REPO_ROOT/configs/adguard/scripts/bootstrap.sh"
+sub "adguard ($IP_ADGUARD): install AGH binary"
+ssh root@"$IP_ADGUARD" 'sh -s' < "$REPO_ROOT/configs/adguard/scripts/bootstrap.sh"
 if [ -x "$REPO_ROOT/configs/adguard/scripts/sync.sh" ]; then
   "$REPO_ROOT/configs/adguard/scripts/sync.sh"
 fi
 
-sub "gateway (192.168.50.40): install Caddy + Authelia + generate OIDC keys"
-ssh root@192.168.50.40 'sh -s' < "$REPO_ROOT/configs/gateway/scripts/bootstrap.sh"
+sub "gateway ($IP_GATEWAY): install Caddy + Authelia + generate OIDC keys"
+ssh root@"$IP_GATEWAY" 'sh -s' < "$REPO_ROOT/configs/gateway/scripts/bootstrap.sh"
 if [ -x "$REPO_ROOT/configs/authelia/scripts/sync.sh" ]; then
   "$REPO_ROOT/configs/authelia/scripts/sync.sh"
 fi
@@ -76,18 +86,20 @@ if [ -x "$REPO_ROOT/configs/gateway/scripts/sync.sh" ]; then
   "$REPO_ROOT/configs/gateway/scripts/sync.sh"
 fi
 
-sub "coolify-runner-01 (192.168.50.210): install Docker"
-ssh root@192.168.50.210 'sh -s' < "$REPO_ROOT/configs/coolify-runner/scripts/bootstrap.sh"
+sub "coolify-runner-01 ($IP_RUNNER): install Docker"
+ssh root@"$IP_RUNNER" 'sh -s' < "$REPO_ROOT/configs/coolify-runner/scripts/bootstrap.sh"
 
 # ───────────────────────────────────────────────────────────────────────────────
-step "4/6" "install cloudflared on Coolify LXC"
+step "4/6" "install cloudflared on Coolify LXC ($IP_COOLIFY)"
 TUNNEL_TOKEN=$(cd "$INFRA_DIR" && tofu output -raw tunnel_token)
-if ssh root@192.168.50.200 'systemctl is-active --quiet cloudflared'; then
+if ssh root@"$IP_COOLIFY" 'systemctl is-active --quiet cloudflared'; then
   sub "cloudflared already running — skipping install"
 else
-  ssh root@192.168.50.200 "
+  ssh root@"$IP_COOLIFY" "
     set -e
     export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y -qq curl ca-certificates gnupg
     mkdir -p --mode=0755 /usr/share/keyrings
     if [ ! -s /usr/share/keyrings/cloudflare-main.gpg ]; then
       curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
@@ -105,7 +117,7 @@ fi
 
 # ───────────────────────────────────────────────────────────────────────────────
 step "5/6" "bootstrap Coolify (install + create root user + mint API token)"
-"$REPO_ROOT/configs/coolify/scripts/bootstrap.sh"
+COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/configs/coolify/scripts/bootstrap.sh"
 
 # ───────────────────────────────────────────────────────────────────────────────
 step "6/6" "tofu apply — stacks/platform (register runner in Coolify)"
@@ -118,5 +130,6 @@ printf '\n\033[1;32m✓ rebuild complete\033[0m\n'
 echo "  Coolify UI:  https://coolify.iedora.com"
 echo "  Authelia UI: https://auth.iedora.com"
 echo "  AdGuard UI:  https://adguard.iedora.com (via gateway with SSO)"
-echo "  Admin email: $(bws secret list --output json | jq -r '.[] | select(.key==\"IEDORA_ADMIN_EMAIL\") | .value')"
+ADMIN_EMAIL=$(bws secret list --output json | jq -r '.[] | select(.key=="IEDORA_ADMIN_EMAIL") | .value')
+echo "  Admin email: $ADMIN_EMAIL"
 echo "  Admin pass:  bws secret list --output json | jq -r '.[] | select(.key==\"IEDORA_ADMIN_PASSWORD\") | .value'"

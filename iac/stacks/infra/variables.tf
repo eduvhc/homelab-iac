@@ -12,12 +12,12 @@ variable "domain" {
 
 variable "bws_keys" {
   type = object({
-    cf_api_token  = string
-    pve_api_token = string
+    cf_api_token      = string
+    pve_root_password = string
   })
   default = {
-    cf_api_token  = "CLOUDFLARE_API_TOKEN"
-    pve_api_token = "PVE_API_TOKEN"
+    cf_api_token      = "CLOUDFLARE_API_TOKEN"
+    pve_root_password = "PVE_ROOT_PASSWORD"
   }
   description = "Names of the BWS secrets to look up (in project: homelab)."
 }
