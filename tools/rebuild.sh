@@ -120,10 +120,21 @@ step "5/6" "bootstrap Coolify (install + create root user + mint API token)"
 COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/configs/coolify/scripts/bootstrap.sh"
 
 # ───────────────────────────────────────────────────────────────────────────────
-step "6/6" "tofu apply — stacks/platform (register runner in Coolify)"
+step "6/7" "tofu apply — stacks/platform (register runner in Coolify)"
 cd "$PLATFORM_DIR"
 tofu init -input=false -upgrade=false >/dev/null
 tofu apply -input=false -auto-approve
+
+# ───────────────────────────────────────────────────────────────────────────────
+step "7/7" "trigger Coolify's Docker engine validation on runner"
+# Coolify's API server-create endpoint runs validateConnection (SSH) but NOT
+# validateDockerEngine. Without this, is_usable stays false until you click
+# "Validate" in the UI. Kick it manually via tinker so the runner is ready
+# for deploys at end-of-rebuild.
+ssh root@"$IP_COOLIFY" "docker exec coolify php artisan tinker --execute='
+\$s = App\\Models\\Server::where(\"name\", \"coolify-runner-01\")->first();
+if (\$s) { \$s->validateDockerEngine(); }
+' 2>&1" | tail -3
 
 # ───────────────────────────────────────────────────────────────────────────────
 printf '\n\033[1;32m✓ rebuild complete\033[0m\n'
