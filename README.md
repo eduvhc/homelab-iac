@@ -3,6 +3,17 @@
 OpenTofu IaC for iedora.com (Cloudflare Tunnel + DNS for the Coolify host).
 Secrets live in **Bitwarden Secrets Manager**, project `homelab`.
 
+
+## Layout
+
+```
+iac/                       OpenTofu stack (CF tunnel + DNS, BWS data sources)
+configs/                   Service configs synced to LXCs (AdGuard, Authelia, Caddy)
+scripts/                   sync-adguard.sh, sync-gateway.sh
+docs/                      3-node-plan.md and other planning docs
+references/                Upstream source as shallow submodules (for reading)
+```
+
 ## What it manages
 
 ```
@@ -53,7 +64,7 @@ chmod 600 /root/.bws-token
 
 # Clone repo and bootstrap:
 git clone <repo-url> /root/iedora-iac
-cd /root/iedora-iac
+cd /root/iedora-iac/iac
 cp .envrc.example .envrc
 ${EDITOR:-vi} .envrc      # set BW_ORGANIZATION_ID
 source .envrc
@@ -66,7 +77,7 @@ tofu apply
 ## Day-to-day
 
 ```bash
-cd /root/iedora-iac
+cd /root/iedora-iac/iac
 source .envrc
 tofu plan
 tofu apply
@@ -97,11 +108,11 @@ If the BWS access token + state passphrase are both lost, recover by:
 
 | File              | Purpose                                            |
 |-------------------|----------------------------------------------------|
-| providers.tf      | Required providers + state encryption block      |
-| variables.tf      | tf_state_passphrase + domain + bws_keys mapping  |
-| bws.tf            | BWS data sources (list secrets, fetch by key)    |
-| coolify.tf        | Tunnel + ingress + DNS records                   |
-| outputs.tf        | tunnel_id + tunnel_token                         |
-| .envrc.example    | Template for env vars (copy to .envrc)           |
+| iac/providers.tf  | Required providers + state encryption block      |
+| iac/variables.tf  | tf_state_passphrase + domain + bws_keys mapping  |
+| iac/bws.tf        | BWS data sources (list secrets, fetch by key)    |
+| iac/tunnel.tf     | Tunnel + ingress + DNS records                   |
+| iac/outputs.tf    | tunnel_id + tunnel_token                         |
+| iac/.envrc.example| Template for env vars (copy to .envrc)           |
 | .gitignore        | Hides .terraform/, .envrc, terraform.tfvars     |
-| terraform.tfstate | ENCRYPTED, committed                            |
+| iac/terraform.tfstate | ENCRYPTED, committed                            |
