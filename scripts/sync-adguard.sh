@@ -1,16 +1,20 @@
 #!/bin/sh
-# Push the local AdGuardHome.yaml to the AdGuard LXC and restart the service.
-# Run from the repo root: scripts/sync-adguard.sh
+# Push AdGuardHome.yaml + nftables.conf to LXC 102 and reload.
 set -e
 HOST="root@192.168.50.30"
-LOCAL="configs/adguard/AdGuardHome.yaml"
-REMOTE="/opt/AdGuardHome/AdGuardHome.yaml"
+YAML_LOCAL="configs/adguard/AdGuardHome.yaml"
+NFT_LOCAL="configs/adguard/nftables.conf"
 
-[ -f "$LOCAL" ] || { echo "missing $LOCAL"; exit 1; }
-echo "==> validating yaml syntax"
-python3 -c "import yaml; yaml.safe_load(open(\"$LOCAL\"))"
-echo "==> pushing to $HOST"
-scp -q "$LOCAL" "$HOST:$REMOTE"
-ssh "$HOST" "chmod 600 $REMOTE && systemctl restart AdGuardHome"
+echo "==> validating AdGuard yaml syntax"
+python3 -c "import yaml; yaml.safe_load(open(\"$YAML_LOCAL\"))"
+
+echo "==> pushing AdGuard config"
+scp -q "$YAML_LOCAL" "$HOST:/opt/AdGuardHome/AdGuardHome.yaml"
+ssh "$HOST" "chmod 600 /opt/AdGuardHome/AdGuardHome.yaml && systemctl restart AdGuardHome"
+
+echo "==> pushing nftables ruleset"
+scp -q "$NFT_LOCAL" "$HOST:/etc/nftables.conf"
+ssh "$HOST" "nft -c -f /etc/nftables.conf && systemctl restart nftables"
+
 echo "==> verifying"
-ssh "$HOST" "systemctl is-active AdGuardHome"
+ssh "$HOST" "systemctl is-active AdGuardHome nftables"
