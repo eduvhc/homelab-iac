@@ -14,6 +14,7 @@ coolify.iedora.com  -> CF tunnel -> http://localhost:8000  (Coolify UI)
 
 - [3-node migration plan](docs/3-node-plan.md) - playbook for when 2 new machines arrive
 - [AdGuard Home config](configs/adguard/AdGuardHome.yaml) - split-DNS rewrites for *.iedora.com
+- [References](references/README.md) - upstream source pinned as submodules
 
 
 State and plan are AES-GCM encrypted with a PBKDF2-derived key.
