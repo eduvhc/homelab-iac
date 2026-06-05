@@ -33,3 +33,8 @@
 	shallow = true
 	url = https://github.com/coollabsio/coolify.git
 	branch = v4.x
+[submodule "references/authelia"]
+	path = references/authelia
+	shallow = true
+	url = https://github.com/authelia/authelia.git
+	branch = master
