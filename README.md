@@ -60,7 +60,7 @@ Secret names used:
 | `CLOUDFLARE_API_TOKEN` | tofu cloudflare provider | operator (one time) |
 | `COOLIFY_ADMIN_NAME` | `configs/coolify/scripts/bootstrap.sh` | operator (one time) |
 | `COOLIFY_ADMIN_EMAIL` | same | operator (one time) |
-| `COOLIFY_ADMIN_PASSWORD` | same | operator (one time) |
+| `IEDORA_ADMIN_PASSWORD` (shared with Authelia) | same | operator (one time) |
 | `COOLIFY_API_TOKEN` | tofu (server resource) | `configs/coolify/scripts/bootstrap.sh` (rotates) |
 
 Nothing sensitive is committed to git. The OpenTofu state file

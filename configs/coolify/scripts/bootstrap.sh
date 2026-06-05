@@ -9,7 +9,7 @@
 #   4. saves the token back into BWS as COOLIFY_API_TOKEN
 #
 # Pre-reqs in BWS project homelab:
-#   COOLIFY_ADMIN_NAME, COOLIFY_ADMIN_EMAIL, COOLIFY_ADMIN_PASSWORD
+#   COOLIFY_ADMIN_NAME, COOLIFY_ADMIN_EMAIL, IEDORA_ADMIN_PASSWORD
 
 set -e
 
@@ -39,7 +39,7 @@ bws_put_or_update() {
 echo "==> reading admin creds from BWS"
 ADMIN_NAME=$(bws_get COOLIFY_ADMIN_NAME)
 ADMIN_EMAIL=$(bws_get COOLIFY_ADMIN_EMAIL)
-ADMIN_PASSWORD=$(bws_get COOLIFY_ADMIN_PASSWORD)
+ADMIN_PASSWORD=$(bws_get IEDORA_ADMIN_PASSWORD)
 for v in "ADMIN_NAME:$ADMIN_NAME" "ADMIN_EMAIL:$ADMIN_EMAIL" "ADMIN_PASSWORD:$ADMIN_PASSWORD"; do
   [ -n "${v#*:}" ] || { echo "ERROR: COOLIFY_${v%:*} missing in BWS"; exit 1; }
 done
