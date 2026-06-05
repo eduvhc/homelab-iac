@@ -7,7 +7,11 @@ locals {
 data "bitwarden-secrets_secret" "cf_api_token" {
   id = local.bws_ids[var.bws_keys.cf_api_token]
 }
+data "bitwarden-secrets_secret" "coolify_api_token" {
+  id = local.bws_ids[var.bws_keys.coolify_api_token]
+}
 
 locals {
-  cf_api_token = data.bitwarden-secrets_secret.cf_api_token.value
+  cf_api_token      = data.bitwarden-secrets_secret.cf_api_token.value
+  coolify_api_token = data.bitwarden-secrets_secret.coolify_api_token.value
 }
