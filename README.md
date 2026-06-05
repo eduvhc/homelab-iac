@@ -27,6 +27,7 @@ iac/stacks/platform/       OpenTofu stack: Coolify-side API objects (runners, ke
                            Reads infra outputs via terraform_remote_state.
 configs/<svc>/             Config files for each service LXC
 configs/<svc>/scripts/     bootstrap.sh (one-time setup) + sync.sh (push config + reload)
+tools/                     Operator scripts (seed-bws, rebuild, drift-check)
 docs/                      How-to docs (setup-from-scratch, inventory, 3-node-plan)
 references/                Upstream source as shallow git submodules (for grep + reading)
 ```
@@ -39,6 +40,18 @@ without `-target=` flags.
 ## Quickstart
 
 **To rebuild from a clean PVE**: follow [`docs/setup-from-scratch.md`](docs/setup-from-scratch.md).
+The from-zero flow boils down to:
+
+```bash
+# On ops LXC, after cloning the repo
+tools/seed-bws.sh      # interactive — populates 7 BWS secrets (idempotent)
+tools/rebuild.sh       # one-shot orchestrator: infra → bootstraps → cloudflared → platform
+```
+
+After the first rebuild, install daily drift detection (cron + ntfy.sh push):
+```bash
+tools/install-drift-cron.sh
+```
 
 **To make changes**:
 
@@ -72,6 +85,7 @@ Secret names used:
 | `IEDORA_ADMIN_EMAIL` (shared) | same | operator (one time) |
 | `IEDORA_ADMIN_PASSWORD` (shared with Authelia) | same | operator (one time) |
 | `COOLIFY_API_TOKEN` | platform stack: terraform_data registrations | `configs/coolify/scripts/bootstrap.sh` (rotates) |
+| `NTFY_TOPIC` | `tools/drift-check.sh` push notifications | `tools/seed-bws.sh` (random) |
 
 Nothing sensitive is committed to git. Both OpenTofu state files
 (`iac/stacks/{infra,platform}/terraform.tfstate`) are committed but

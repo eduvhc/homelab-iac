@@ -26,18 +26,25 @@ old `-target=` hack and keeps blast radius scoped.
 - A Cloudflare account with the `iedora.com` zone
 - A BWS access token (created via the Bitwarden web UI under "Machine accounts")
 
-Seed BWS **before** anything boots:
+Seed BWS **before** anything boots. Use `tools/seed-bws.sh` (from the ops LXC,
+after the repo is cloned and `.envrc` is configured):
 
-| Key | Source |
-|---|---|
-| `TOFU_STATE_PASSPHRASE` | `openssl rand -base64 24 \| tr -d /+=` |
-| `CLOUDFLARE_API_TOKEN` | Custom Token (Account/Cloudflare Tunnel: Edit, Account/Zero Trust: Edit, Zone/DNS: Edit on iedora.com) |
-| `PVE_API_TOKEN` | On the PVE host: `pveum user token add root@pam tofu --privsep=0` — format `root@pam!tofu=<uuid>` |
-| `IEDORA_ADMIN_NAME` | operator (e.g. your name) |
-| `IEDORA_ADMIN_EMAIL` | operator email |
-| `IEDORA_ADMIN_PASSWORD` | `openssl rand -base64 18 \| tr -d /+=` — used by both Authelia and Coolify |
+```bash
+tools/seed-bws.sh
+```
 
-`COOLIFY_API_TOKEN` is created later, by the Coolify bootstrap script.
+The script is idempotent and:
+- auto-generates `TOFU_STATE_PASSPHRASE`, `IEDORA_ADMIN_PASSWORD`, `NTFY_TOPIC`
+- prompts for `CLOUDFLARE_API_TOKEN`, `PVE_API_TOKEN`, `IEDORA_ADMIN_NAME`, `IEDORA_ADMIN_EMAIL`
+- skips any secret that already exists
+
+For the `PVE_API_TOKEN` it tells you to run on the PVE host:
+```bash
+pveum user token add root@pam tofu --privsep=0
+```
+…then paste the resulting full token (`root@pam!tofu=<uuid>`).
+
+`COOLIFY_API_TOKEN` is created later, by `tools/rebuild.sh` (Phase 5 below).
 
 ## Inventory snapshot
 
@@ -104,6 +111,20 @@ cp .envrc.example .envrc
 # Edit .envrc → paste BW_ORGANIZATION_ID
 echo "<BWS_ACCESS_TOKEN>" > /root/.bws-token && chmod 600 /root/.bws-token
 ```
+
+## Phase 1-4 in one shot: `tools/rebuild.sh`
+
+Once Phase 0 is done and BWS is seeded, the entire rebuild is a single
+command from the ops LXC:
+
+```bash
+cd /root/iedora-iac
+tools/rebuild.sh
+```
+
+This does Phases 1 through 4 in sequence with idempotency at each step. The
+phases are documented below so you can run them individually if anything
+breaks mid-flight.
 
 ## Phase 1 — Apply the infra stack
 
@@ -192,6 +213,18 @@ tofu apply
 Expected: ~30 sec. After this:
 - Coolify UI → Servers shows `coolify-runner-01` as `usable=true` once
   Coolify's async validator confirms Docker is reachable.
+
+## Phase 4.5 — Install drift detection cron
+
+Daily `tofu plan` check + ntfy push notification on any drift:
+
+```bash
+tools/install-drift-cron.sh
+```
+
+Subscribe to `https://ntfy.sh/<NTFY_TOPIC>` (value in BWS) in the ntfy app
+or browser to receive alerts. The cron runs at 06:30 UTC daily; tail
+`/var/log/iac-drift.log` to see history.
 
 ## Phase 5 — Backup target
 
