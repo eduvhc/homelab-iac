@@ -1,0 +1,17 @@
+[Unit]
+Description=Authelia authentication and authorization server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=authelia
+Group=authelia
+EnvironmentFile=/etc/authelia/secrets.env
+ExecStart=/usr/local/bin/authelia --config=/etc/authelia/configuration.yml --config.experimental.filters=template
+Restart=on-failure
+RestartSec=10
+SyslogIdentifier=authelia
+
+[Install]
+WantedBy=multi-user.target

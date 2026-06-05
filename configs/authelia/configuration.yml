@@ -12,8 +12,8 @@ authentication_backend:
     path: /etc/authelia/users_database.yml
 session:
   cookies:
-    - domain: iedora.com
-      authelia_url: https://auth.iedora.com
+  - domain: iedora.com
+    authelia_url: https://auth.iedora.com
 storage:
   local:
     path: /var/lib/authelia/db.sqlite3
@@ -23,9 +23,32 @@ notifier:
 access_control:
   default_policy: deny
   rules:
-    - domain:
-        - "auth.iedora.com"
-      policy: bypass
-    - domain:
-        - "*.iedora.com"
-      policy: one_factor
+  - domain:
+    - auth.iedora.com
+    policy: bypass
+  - domain:
+    - '*.iedora.com'
+    policy: one_factor
+identity_providers:
+  oidc:
+    jwks:
+    - key_id: main
+      algorithm: RS256
+      use: sig
+      key: |
+        {{- fileContent "/etc/authelia/oidc-private.pem" | nindent 8 }}
+    clients:
+    - client_id: coolify
+      client_name: Coolify
+      client_secret: $pbkdf2-sha512$310000$1dV1QB3D/YeONDS0mvQPnw$K6ro1bSsztpEUxdwit./VoeqbkD.Ns3rfGeXP8ArPDJoybY4hhY9nomfUZKOOXfV0FMB.JlAqwv3ZWGhFuVGcw
+      public: false
+      authorization_policy: one_factor
+      require_pkce: true
+      pkce_challenge_method: S256
+      redirect_uris:
+      - https://coolify.iedora.com/auth/oidc/callback
+      scopes:
+      - openid
+      - profile
+      - email
+      userinfo_signed_response_alg: none
