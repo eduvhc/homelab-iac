@@ -40,6 +40,7 @@ identity_providers:
     clients:
     - client_id: coolify
       client_name: Coolify
+      token_endpoint_auth_method: client_secret_post
       client_secret: $pbkdf2-sha512$310000$1dV1QB3D/YeONDS0mvQPnw$K6ro1bSsztpEUxdwit./VoeqbkD.Ns3rfGeXP8ArPDJoybY4hhY9nomfUZKOOXfV0FMB.JlAqwv3ZWGhFuVGcw
       public: false
       authorization_policy: one_factor
