@@ -10,3 +10,4 @@ override.tf
 override.tf.json
 terraform.tfvars
 *.tfstate.backup
+*.tfstate.*.backup

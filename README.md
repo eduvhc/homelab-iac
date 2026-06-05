@@ -1,118 +1,99 @@
 # iedora-iac
 
-OpenTofu IaC for iedora.com (Cloudflare Tunnel + DNS for the Coolify host).
-Secrets live in **Bitwarden Secrets Manager**, project `homelab`.
+Single source of truth for the iedora.com homelab on Proxmox VE.
 
+```
+PVE host (Beelink N100 today, 3-node cluster soon)
+├── LXC 101  ops              — OpenTofu + bws CLI + git (where this repo is cloned)
+├── LXC 102  adguard          — AdGuard Home (LAN DNS + split-DNS for *.iedora.com)
+├── LXC 103  gateway          — Caddy + Authelia (SSO for homelab admin UIs)
+├── LXC 200  coolify          — Coolify control plane + cloudflared (CF tunnel)
+└── LXC 210  coolify-runner-01 — Docker engine where apps deployed by Coolify run
+```
+
+Public access: `https://*.iedora.com` → Cloudflare tunnel → either Coolify
+control plane (for `coolify.iedora.com`), gateway/Caddy (for protected admin
+UIs like `auth`, `adguard`), or Coolify's Traefik on the runner (for deployed
+apps via the wildcard).
+
+LAN access: AdGuard rewrites `*.iedora.com` to internal IPs, so LAN traffic
+bypasses the tunnel for latency.
 
 ## Layout
 
 ```
-iac/                       OpenTofu stack (CF tunnel + DNS, BWS data sources)
-configs/                   Service configs synced to LXCs (AdGuard, Authelia, Caddy)
-(removed - per-service sync.sh in each configs/<svc>/)
-docs/                      3-node-plan.md and other planning docs
-references/                Upstream source as shallow submodules (for reading)
+iac/                       OpenTofu stack (CF tunnel + DNS + Coolify server resource)
+configs/<svc>/             Config files for each service LXC
+configs/<svc>/scripts/     bootstrap.sh (one-time setup) + sync.sh (push config + reload)
+docs/                      How-to docs (setup-from-scratch, inventory, 3-node-plan)
+references/                Upstream source as shallow git submodules (for grep + reading)
 ```
 
-## What it manages
+## Quickstart
 
-```
-coolify.iedora.com  -> CF tunnel -> http://localhost:8000  (Coolify UI)
-*.iedora.com        -> CF tunnel -> http://localhost:80    (Traefik in Coolify)
-```
+**To rebuild from a clean PVE**: follow [`docs/setup-from-scratch.md`](docs/setup-from-scratch.md).
+
+**To make changes**:
+
+| What you want to do | Where you edit | What you run |
+|---|---|---|
+| Add/change Cloudflare DNS or tunnel route | `iac/coolify.tf` (will be renamed `iac/tunnel.tf` again later) | `cd iac && tofu apply` |
+| Add a Coolify runner server | `iac/coolify.tf` | `cd iac && tofu apply` |
+| Edit AdGuard rewrites/filters | `configs/adguard/AdGuardHome.yaml` | `configs/adguard/scripts/sync.sh` |
+| Add an Authelia OIDC client | `configs/authelia/configuration.yml` | `configs/authelia/scripts/sync.sh` |
+| Add a Caddy reverse proxy entry | `configs/gateway/Caddyfile` | `configs/gateway/scripts/sync.sh` |
+| Rotate the Coolify API token | (nothing in code) | `configs/coolify/scripts/bootstrap.sh` |
+
+After any of these: `git add … && git commit && git push`.
+
+## Secrets
+
+Live in **Bitwarden Secrets Manager** (project: `homelab`). The repo IaC
+references them by name via the `bitwarden/bitwarden-secrets` provider; the
+operational scripts read them via the `bws` CLI.
+
+Secret names used:
+
+| Key | Used by | Who creates it |
+|---|---|---|
+| `TOFU_STATE_PASSPHRASE` | `iac/.envrc` (state encryption) | operator (one time) |
+| `CLOUDFLARE_API_TOKEN` | tofu cloudflare provider | operator (one time) |
+| `COOLIFY_ADMIN_NAME` | `configs/coolify/scripts/bootstrap.sh` | operator (one time) |
+| `COOLIFY_ADMIN_EMAIL` | same | operator (one time) |
+| `COOLIFY_ADMIN_PASSWORD` | same | operator (one time) |
+| `COOLIFY_API_TOKEN` | tofu (server resource) | `configs/coolify/scripts/bootstrap.sh` (rotates) |
+
+Nothing sensitive is committed to git. The OpenTofu state file
+(`iac/terraform.tfstate`) is committed but PBKDF2-AES-GCM encrypted with
+`TOFU_STATE_PASSPHRASE`.
 
 ## Docs
 
-- [3-node migration plan](docs/3-node-plan.md) - playbook for when 2 new machines arrive
-- [AdGuard Home config](configs/adguard/AdGuardHome.yaml) - split-DNS rewrites for *.iedora.com
-- [Gateway (Caddy+Authelia) configs](configs/gateway/Caddyfile) - SSO for homelab admin UIs
-- [References](references/README.md) - upstream source pinned as submodules
+- [`docs/setup-from-scratch.md`](docs/setup-from-scratch.md) — full end-to-end procedure
+- [`docs/inventory.md`](docs/inventory.md) — LXCs, IPs, tags, PVE storages
+- [`docs/3-node-plan.md`](docs/3-node-plan.md) — migration plan for when 2 more PVE hosts arrive
 
+## References
 
-State and plan are AES-GCM encrypted with a PBKDF2-derived key.
-The encrypted terraform.tfstate IS committed to this public repo.
-Recovery requires the BWS access token + state passphrase (also in BWS).
+Upstream source pinned as shallow submodules under `references/` so any
+human or agent can read source locally:
 
-## Required BWS secrets (project: homelab)
+| Submodule | Used by |
+|---|---|
+| `AdGuardHome` | LXC 102 |
+| `coolify` | LXC 200 |
+| `coolify-docs` | LXC 200 (docs source) |
+| `opentofu` | LXC 101 |
+| `cloudflared` | LXC 200 |
+| `terraform-provider-cloudflare` | provider in `iac/providers.tf` |
+| `terraform-provider-bitwarden-secrets` | same |
+| `bitwarden-sdk-sm` | bws CLI in LXC 101 |
+| `authelia` | LXC 103 |
+| `caddy` | LXC 103 |
 
-> The CF account_id and zone_id are looked up at plan-time via the
-> `cloudflare_zone` data source (filtered by domain). The API token must be
-> scoped to a specific account + zone for the lookup to be deterministic.
-
-
-| Key                       | Content                                          |
-|---------------------------|--------------------------------------------------|
-| CLOUDFLARE_API_TOKEN      | Cloudflare API token (Tunnel:Edit + Zero Trust:Edit + DNS:Edit, scoped to account + iedora.com zone)|
-| TOFU_STATE_PASSPHRASE     | Passphrase for state encryption (>=16 chars)     |
-
-The machine account must have read access to the `homelab` project.
-
-## Editing secrets
-
-In the Bitwarden web UI: Secrets Manager -> Projects -> homelab -> click the
-secret -> edit value -> save. Next `tofu apply` picks up the new value
-automatically.
-
-## One-time setup on a fresh machine
-
+Clone with submodules:
 ```bash
-# Install OpenTofu, bws CLI, git, jq.
-
-# Write the machine-account access token (sensitive, 0600):
-echo "<BW_ACCESS_TOKEN>" > /root/.bws-token
-chmod 600 /root/.bws-token
-
-# Clone repo and bootstrap:
-git clone <repo-url> /root/iedora-iac
-cd /root/iedora-iac/iac
-cp .envrc.example .envrc
-${EDITOR:-vi} .envrc      # set BW_ORGANIZATION_ID
-source .envrc
-
-tofu init
-tofu plan
-tofu apply
+git clone --recurse-submodules git@github.com:eduvhc/iedora-iac.git
+# or if already cloned:
+git submodule update --init --recursive --depth 1
 ```
-
-## Day-to-day
-
-```bash
-cd /root/iedora-iac/iac
-source .envrc
-tofu plan
-tofu apply
-git add . && git commit -m "..." && git push
-```
-
-## Get the tunnel token (after first apply)
-
-```bash
-TUNNEL_TOKEN=$(tofu output -raw tunnel_token)
-ssh root@192.168.50.200 "cloudflared service install $TUNNEL_TOKEN"
-ssh root@192.168.50.200 "systemctl status cloudflared --no-pager | head -5"
-```
-
-## Disaster recovery
-
-1. Fresh machine with OpenTofu + bws + git + jq.
-2. Create or reuse a BWS machine account, generate access token.
-3. `echo $TOKEN > /root/.bws-token && chmod 600 /root/.bws-token`.
-4. `git clone` + `cp .envrc.example .envrc` + set BW_ORGANIZATION_ID.
-5. `source .envrc && tofu init && tofu plan` -> "No changes" if state is current.
-
-If the BWS access token + state passphrase are both lost, recover by:
-- Generating new state passphrase in BWS.
-- `rm -f terraform.tfstate*` and `tofu import` each existing CF resource by ID.
-
-## Files
-
-| File              | Purpose                                            |
-|-------------------|----------------------------------------------------|
-| iac/providers.tf  | Required providers + state encryption block      |
-| iac/variables.tf  | tf_state_passphrase + domain + bws_keys mapping  |
-| iac/bws.tf        | BWS data sources (list secrets, fetch by key)    |
-| iac/tunnel.tf     | Tunnel + ingress + DNS records                   |
-| iac/outputs.tf    | tunnel_id + tunnel_token                         |
-| iac/.envrc.example| Template for env vars (copy to .envrc)           |
-| .gitignore        | Hides .terraform/, .envrc, terraform.tfvars     |
-| iac/terraform.tfstate | ENCRYPTED, committed                            |
