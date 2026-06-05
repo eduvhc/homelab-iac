@@ -4,24 +4,24 @@ http:
     enabled: false
   doh:
     routes:
-      - GET /dns-query
-      - POST /dns-query
-      - GET /dns-query/{ClientID}
-      - POST /dns-query/{ClientID}
+    - GET /dns-query
+    - POST /dns-query
+    - GET /dns-query/{ClientID}
+    - POST /dns-query/{ClientID}
     insecure_enabled: false
   address: 0.0.0.0:3000
   session_ttl: 30d
 users:
-  - name: admin
-    password: $2a$10$3WQzPlra4F2WI/1nOIdjsuuTwJfox.UZJf/702L.rfe95SLYWDYiC
+- name: admin
+  password: $2a$10$3WQzPlra4F2WI/1nOIdjsuuTwJfox.UZJf/702L.rfe95SLYWDYiC
 auth_attempts: 5
 block_auth_min: 15
-http_proxy: ""
-language: ""
+http_proxy: ''
+language: ''
 theme: auto
 dns:
   bind_hosts:
-    - 0.0.0.0
+  - 0.0.0.0
   port: 53
   anonymize_client_ip: false
   ratelimit: 20
@@ -30,26 +30,26 @@ dns:
   ratelimit_whitelist: []
   refuse_any: true
   upstream_dns:
-    - https://1.1.1.1/dns-query
-    - https://dns10.quad9.net/dns-query
-  upstream_dns_file: ""
+  - https://1.1.1.1/dns-query
+  - https://dns10.quad9.net/dns-query
+  upstream_dns_file: ''
   bootstrap_dns:
-    - 9.9.9.10
-    - 149.112.112.10
-    - 2620:fe::10
-    - 2620:fe::fe:10
+  - 9.9.9.10
+  - 149.112.112.10
+  - 2620:fe::10
+  - 2620:fe::fe:10
   fallback_dns: []
   upstream_mode: load_balance
   fastest_timeout: 1s
   allowed_clients: []
   disallowed_clients: []
   blocked_hosts:
-    - version.bind
-    - id.server
-    - hostname.bind
+  - version.bind
+  - id.server
+  - hostname.bind
   trusted_proxies:
-    - 127.0.0.0/8
-    - ::1/128
+  - 127.0.0.0/8
+  - ::1/128
   cache_enabled: true
   cache_size: 4194304
   cache_ttl_min: 0
@@ -61,13 +61,13 @@ dns:
   aaaa_disabled: false
   enable_dnssec: true
   edns_client_subnet:
-    custom_ip: ""
+    custom_ip: ''
     enabled: false
     use_custom: false
   max_goroutines: 300
   handle_ddr: true
   ipset: []
-  ipset_file: ""
+  ipset_file: ''
   bootstrap_prefer_ipv6: false
   upstream_timeout: 10s
   private_networks: []
@@ -83,20 +83,20 @@ dns:
     enabled: true
 tls:
   enabled: false
-  server_name: ""
+  server_name: ''
   force_https: false
   port_https: 443
   port_dns_over_tls: 853
   port_dns_over_quic: 853
   port_dnscrypt: 0
-  dnscrypt_config_file: ""
-  certificate_chain: ""
-  private_key: ""
-  certificate_path: ""
-  private_key_path: ""
+  dnscrypt_config_file: ''
+  certificate_chain: ''
+  private_key: ''
+  certificate_path: ''
+  private_key_path: ''
   strict_sni_check: false
 querylog:
-  dir_path: ""
+  dir_path: ''
   ignored: []
   interval: 90d
   size_memory: 1000
@@ -104,42 +104,42 @@ querylog:
   ignored_enabled: false
   file_enabled: true
 statistics:
-  dir_path: ""
+  dir_path: ''
   ignored: []
   interval: 1d
   enabled: true
   ignored_enabled: false
 filters:
-  - enabled: true
-    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
-    name: AdGuard DNS filter
-    id: 1
-  - enabled: false
-    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_2.txt
-    name: AdAway Default Blocklist
-    id: 2
+- enabled: true
+  url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
+  name: AdGuard DNS filter
+  id: 1
+- enabled: false
+  url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_2.txt
+  name: AdAway Default Blocklist
+  id: 2
 whitelist_filters: []
 user_rules: []
 dhcp:
   enabled: false
-  interface_name: ""
+  interface_name: ''
   local_domain_name: lan
   dhcpv4:
-    gateway_ip: ""
-    subnet_mask: ""
-    range_start: ""
-    range_end: ""
+    gateway_ip: ''
+    subnet_mask: ''
+    range_start: ''
+    range_end: ''
     lease_duration: 86400
     icmp_timeout_msec: 1000
     options: []
   dhcpv6:
-    range_start: ""
+    range_start: ''
     lease_duration: 86400
     ra_slaac_only: false
     ra_allow_slaac: false
 filtering:
-  blocking_ipv4: ""
-  blocking_ipv6: ""
+  blocking_ipv4: ''
+  blocking_ipv6: ''
   blocked_services:
     schedule:
       time_zone: Local
@@ -158,14 +158,20 @@ filtering:
   parental_block_host: family-block.dns.adguard.com
   safebrowsing_block_host: standard-block.dns.adguard.com
   rewrites:
-    - domain: '*.iedora.com'
-      answer: 192.168.50.200
-      enabled: true
-    - domain: iedora.com
-      answer: 192.168.50.200
-      enabled: true
+  - domain: auth.iedora.com
+    answer: 192.168.50.40
+    enabled: true
+  - domain: adguard.iedora.com
+    answer: 192.168.50.40
+    enabled: true
+  - domain: '*.iedora.com'
+    answer: 192.168.50.200
+    enabled: true
+  - domain: iedora.com
+    answer: 192.168.50.200
+    enabled: true
   safe_fs_patterns:
-    - /opt/AdGuardHome/userfilters/*
+  - /opt/AdGuardHome/userfilters/*
   safebrowsing_cache_size: 1048576
   safesearch_cache_size: 1048576
   parental_cache_size: 1048576
@@ -187,7 +193,7 @@ clients:
   persistent: []
 log:
   enabled: true
-  file: ""
+  file: ''
   max_backups: 0
   max_size: 100
   max_age: 3
@@ -195,7 +201,7 @@ log:
   local_time: false
   verbose: false
 os:
-  group: ""
-  user: ""
+  group: ''
+  user: ''
   rlimit_nofile: 0
 schema_version: 34

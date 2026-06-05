@@ -14,6 +14,7 @@ coolify.iedora.com  -> CF tunnel -> http://localhost:8000  (Coolify UI)
 
 - [3-node migration plan](docs/3-node-plan.md) - playbook for when 2 new machines arrive
 - [AdGuard Home config](configs/adguard/AdGuardHome.yaml) - split-DNS rewrites for *.iedora.com
+- [Gateway (Caddy+Authelia) configs](configs/gateway/Caddyfile) - SSO for homelab admin UIs
 - [References](references/README.md) - upstream source pinned as submodules
 
 

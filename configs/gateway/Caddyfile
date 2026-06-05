@@ -1,0 +1,27 @@
+{
+    email eduardoferdcarvalho@gmail.com
+    # Behind cloudflared tunnel which terminates TLS at CF edge; serve plain HTTP internally
+    auto_https off
+    servers {
+        trusted_proxies static 192.168.50.200 127.0.0.1
+    }
+}
+
+# Shared snippet for Authelia-protected services
+(authelia) {
+    forward_auth localhost:9091 {
+        uri /api/authz/forward-auth
+        copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+    }
+}
+
+# Authelia UI itself - no forward-auth (login page must be reachable)
+auth.iedora.com:80 {
+    reverse_proxy localhost:9091
+}
+
+# AdGuard admin UI - protected
+adguard.iedora.com:80 {
+    import authelia
+    reverse_proxy http://192.168.50.30:3000
+}

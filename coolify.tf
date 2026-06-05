@@ -32,6 +32,14 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "coolify" {
         service  = "http://localhost:8000"
       },
       {
+        hostname = "auth.${var.domain}"
+        service  = "http://192.168.50.40:80"
+      },
+      {
+        hostname = "adguard.${var.domain}"
+        service  = "http://192.168.50.40:80"
+      },
+      {
         hostname = "*.${var.domain}"
         service  = "http://localhost:80"
       },
@@ -42,20 +50,24 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "coolify" {
   }
 }
 
-resource "cloudflare_dns_record" "coolify_ui" {
-  zone_id = local.cf_zone_id
-  name    = "coolify"
-  type    = "CNAME"
-  content = "${cloudflare_zero_trust_tunnel_cloudflared.coolify.id}.cfargotunnel.com"
-  ttl     = 1
-  proxied = true
+# All hostnames that the tunnel handles. Specific records are required for
+# each hostname referenced in the tunnel ingress; the wildcard catches the rest
+# (Coolify-deployed apps).
+locals {
+  tunnel_hostnames = toset([
+    "coolify",   # Coolify UI (Coolify LXC :8000)
+    "auth",      # Authelia UI (gateway LXC :80)
+    "adguard",   # AdGuard admin UI (proxied via gateway LXC with SSO)
+    "*",         # wildcard for Coolify-deployed apps
+  ])
 }
 
-resource "cloudflare_dns_record" "apps_wildcard" {
-  zone_id = local.cf_zone_id
-  name    = "*"
-  type    = "CNAME"
-  content = "${cloudflare_zero_trust_tunnel_cloudflared.coolify.id}.cfargotunnel.com"
-  ttl     = 1
-  proxied = true
+resource "cloudflare_dns_record" "tunnel" {
+  for_each = local.tunnel_hostnames
+  zone_id  = local.cf_zone_id
+  name     = each.value
+  type     = "CNAME"
+  content  = "${cloudflare_zero_trust_tunnel_cloudflared.coolify.id}.cfargotunnel.com"
+  ttl      = 1
+  proxied  = true
 }
