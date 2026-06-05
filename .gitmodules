@@ -28,3 +28,8 @@
 	shallow = true
 	url = https://github.com/bitwarden/sdk-sm.git
 	branch = main
+[submodule "references/coolify"]
+	path = references/coolify
+	shallow = true
+	url = https://github.com/coollabsio/coolify.git
+	branch = v4.x
