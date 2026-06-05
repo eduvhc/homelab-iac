@@ -43,3 +43,8 @@
 	shallow = true
 	url = https://github.com/caddyserver/caddy.git
 	branch = master
+[submodule "references/coolify-docs"]
+	path = references/coolify-docs
+	shallow = true
+	url = https://github.com/coollabsio/coolify-docs.git
+	branch = v4.x
