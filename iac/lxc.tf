@@ -1,57 +1,5 @@
-# Declarative LXC definitions. LXC 101 (ops) is NOT here — it's where tofu runs,
-# so it has to bootstrap manually. Everything else: tofu apply creates the LXC
-# at the right node with the right resources/tags.
-
-locals {
-  pve_node = "pve"
-
-  lxcs = {
-    adguard = {
-      vm_id     = 102
-      hostname  = "adguard"
-      ip        = "192.168.50.30/24"
-      cores     = 1
-      memory_mb = 512
-      swap_mb   = 256
-      disk_gb   = 2
-      tags      = ["infra", "dns"]
-      features  = { nesting = false, keyctl = false }
-    }
-    gateway = {
-      vm_id     = 103
-      hostname  = "gateway"
-      ip        = "192.168.50.40/24"
-      cores     = 1
-      memory_mb = 512
-      swap_mb   = 256
-      disk_gb   = 4
-      tags      = ["infra", "sso"]
-      features  = { nesting = false, keyctl = false }
-    }
-    coolify = {
-      vm_id     = 200
-      hostname  = "coolify"
-      ip        = "192.168.50.200/24"
-      cores     = 4
-      memory_mb = 6144
-      swap_mb   = 1024
-      disk_gb   = 60
-      tags      = ["coolify", "control-plane"]
-      features  = { nesting = true, keyctl = true }
-    }
-    coolify_runner_01 = {
-      vm_id     = 210
-      hostname  = "coolify-runner-01"
-      ip        = "192.168.50.210/24"
-      cores     = 2
-      memory_mb = 4096
-      swap_mb   = 1024
-      disk_gb   = 30
-      tags      = ["coolify", "runtime"]
-      features  = { nesting = true, keyctl = true }
-    }
-  }
-}
+# Declarative LXC definitions. Container specs come from local.lxcs (see locals.tf).
+# LXC 101 (ops) is NOT here — it's where tofu runs.
 
 resource "proxmox_virtual_environment_container" "lxc" {
   for_each = local.lxcs
@@ -108,7 +56,7 @@ resource "proxmox_virtual_environment_container" "lxc" {
 
   # template_file_id and SSH keys are one-shot create attributes; importing
   # an existing LXC shows them as "to be added" which would force replacement.
-  # Ignore drift on these so the resource stays in sync without recreate.
+  # Canonical post-import workaround per bpg upstream issue #2901.
   lifecycle {
     ignore_changes = [
       operating_system[0].template_file_id,

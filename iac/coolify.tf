@@ -10,7 +10,7 @@ resource "terraform_data" "push_pubkey_runner_01" {
   provisioner "local-exec" {
     command = <<-EOC
       KEY=$(echo '${trimspace(tls_private_key.coolify_runner_key.public_key_openssh)}')
-      ssh -o StrictHostKeyChecking=accept-new root@192.168.50.210 \
+      ssh -o StrictHostKeyChecking=accept-new root@${local.ips.coolify_runner_01} \
         "grep -qxF \"$KEY\" /root/.ssh/authorized_keys || echo \"$KEY\" >> /root/.ssh/authorized_keys"
     EOC
   }
@@ -24,7 +24,7 @@ resource "terraform_data" "push_pubkey_runner_01" {
 resource "terraform_data" "coolify_runner_01" {
   triggers_replace = [
     tls_private_key.coolify_runner_key.private_key_pem,
-    "192.168.50.210",
+    local.ips.coolify_runner_01,
   ]
 
   input = {
@@ -48,7 +48,7 @@ resource "terraform_data" "coolify_runner_01" {
         -H "Authorization: Bearer ${self.input.api_token}" \
         -H "Content-Type: application/json" \
         --data "$KEY_BODY" \
-        http://192.168.50.200:8000/api/v1/security/keys)
+        ${local.coolify_api_url}/api/v1/security/keys)
       KEY_UUID=$(echo "$KEY_RESP" | jq -r .uuid)
       [ -n "$KEY_UUID" ] && [ "$KEY_UUID" != "null" ] || { echo "ERROR: failed to create key: $KEY_RESP" >&2; exit 1; }
       echo "==> created Coolify private_key uuid=$KEY_UUID"
@@ -57,7 +57,7 @@ resource "terraform_data" "coolify_runner_01" {
       SRV_BODY=$(jq -nc --arg pk "$KEY_UUID" '{
         name: "coolify-runner-01",
         description: "LXC 210. coolify;runtime.",
-        ip: "192.168.50.210",
+        ip: local.ips.coolify_runner_01,
         port: 22,
         user: "root",
         private_key_uuid: $pk,
@@ -67,7 +67,7 @@ resource "terraform_data" "coolify_runner_01" {
         -H "Authorization: Bearer ${self.input.api_token}" \
         -H "Content-Type: application/json" \
         --data "$SRV_BODY" \
-        http://192.168.50.200:8000/api/v1/servers)
+        ${local.coolify_api_url}/api/v1/servers)
       SRV_UUID=$(echo "$SRV_RESP" | jq -r .uuid)
       [ -n "$SRV_UUID" ] && [ "$SRV_UUID" != "null" ] || { echo "ERROR: failed to create server: $SRV_RESP" >&2; exit 1; }
       echo "==> registered server uuid=$SRV_UUID"
