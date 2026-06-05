@@ -157,16 +157,16 @@ filtering:
   safebrowsing_block_host: standard-block.dns.adguard.com
   rewrites:
   - domain: auth.iedora.com
-    answer: 192.168.50.40
+    answer: ${IP_GATEWAY}
     enabled: true
   - domain: adguard.iedora.com
-    answer: 192.168.50.40
+    answer: ${IP_GATEWAY}
     enabled: true
   - domain: '*.iedora.com'
-    answer: 192.168.50.200
+    answer: ${IP_COOLIFY}
     enabled: true
   - domain: iedora.com
-    answer: 192.168.50.200
+    answer: ${IP_COOLIFY}
     enabled: true
   safe_fs_patterns:
   - /opt/AdGuardHome/userfilters/*

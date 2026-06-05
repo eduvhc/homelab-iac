@@ -7,6 +7,12 @@
 locals {
   pve_node = "pve"
 
+  # Network constants — used both inside tofu and by shell scripts (via
+  # tofu output -> tools/lib/lxc-ips.sh). Keep this block in sync with
+  # docs/inventory.md.
+  lan_cidr    = "192.168.50.0/24"
+  lan_gateway = "192.168.50.1"
+
   # IPs without prefix; service URLs and LXC `ip` strings add it.
   ips = {
     adguard           = "192.168.50.30"

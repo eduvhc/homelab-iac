@@ -17,7 +17,7 @@ resource "proxmox_virtual_environment_container" "lxc" {
     ip_config {
       ipv4 {
         address = each.value.ip
-        gateway = "192.168.50.1"
+        gateway = local.lan_gateway
       }
     }
     dns {

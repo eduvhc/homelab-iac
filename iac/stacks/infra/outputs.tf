@@ -22,3 +22,11 @@ output "coolify_api_url" {
   value       = local.coolify_api_url
   description = "Internal HTTP URL of the Coolify API. Consumed by the platform stack."
 }
+
+output "network" {
+  value = {
+    lan_cidr    = local.lan_cidr
+    lan_gateway = local.lan_gateway
+  }
+  description = "Network constants. Consumed by tools/lib/lxc-ips.sh for envsubst-templated config files (nftables.conf.tmpl, etc.)."
+}

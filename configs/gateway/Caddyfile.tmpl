@@ -3,7 +3,7 @@
     # Behind cloudflared tunnel which terminates TLS at CF edge; serve plain HTTP internally
     auto_https off
     servers {
-        trusted_proxies static 192.168.50.200 127.0.0.1
+        trusted_proxies static ${IP_COOLIFY} 127.0.0.1
     }
 }
 
@@ -23,5 +23,5 @@ auth.iedora.com:80 {
 # AdGuard admin UI - protected
 adguard.iedora.com:80 {
     import authelia
-    reverse_proxy http://192.168.50.30:3000
+    reverse_proxy http://${IP_ADGUARD}:3000
 }

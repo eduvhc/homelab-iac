@@ -1,13 +1,15 @@
 # shellcheck shell=sh
-# Source this from any tool/script that needs LXC IPs.
+# Source this from any tool/script that needs LXC IPs or network constants.
 #
-# Single source of truth: iac/stacks/infra/locals.tf → output `lxc_ips`.
-# This script reads that output via `tofu output -json lxc_ips` and exports
-# canonical IP_* env vars so consumers never hardcode an IP.
+# Single source of truth: iac/stacks/infra/locals.tf → outputs lxc_ips + network.
+# This script reads them via tofu output and exports canonical env vars so
+# consumers never hardcode an IP. Used by tools/rebuild.sh and configs/*/sync.sh
+# (including envsubst rendering of *.tmpl config files).
 #
 # Usage:
 #   . "$REPO_ROOT/tools/lib/lxc-ips.sh"
 #   ssh root@"$IP_COOLIFY" ...
+#   envsubst < Caddyfile.tmpl > Caddyfile
 #   for ip in $ALL_LXC_IPS; do ...; done
 #
 # Pre-reqs:
@@ -21,21 +23,28 @@ set -e
 command -v tofu >/dev/null || { echo "lxc-ips.sh: tofu not in PATH" >&2; exit 1; }
 command -v jq >/dev/null   || { echo "lxc-ips.sh: jq not in PATH" >&2; exit 1; }
 
-_lxc_ips_json=$(cd "$REPO_ROOT/iac/stacks/infra" && tofu output -json lxc_ips 2>/dev/null) || {
-  echo "lxc-ips.sh: tofu output -json lxc_ips failed (has stacks/infra been applied?)" >&2
-  exit 1
-}
-[ -n "$_lxc_ips_json" ] && [ "$_lxc_ips_json" != "null" ] || {
-  echo "lxc-ips.sh: lxc_ips output is empty — has stacks/infra been applied?" >&2
+# Single tofu invocation reading all outputs at once — saves ~1s.
+_infra_outputs=$(cd "$REPO_ROOT/iac/stacks/infra" && tofu output -json 2>/dev/null) || {
+  echo "lxc-ips.sh: tofu output -json failed (has stacks/infra been applied?)" >&2
   exit 1
 }
 
-# Exported, named uppercase by LXC role.
-IP_ADGUARD=$(printf '%s' "$_lxc_ips_json" | jq -r .adguard)
-IP_GATEWAY=$(printf '%s' "$_lxc_ips_json" | jq -r .gateway)
-IP_COOLIFY=$(printf '%s' "$_lxc_ips_json" | jq -r .coolify)
-IP_RUNNER=$(printf '%s'  "$_lxc_ips_json" | jq -r .coolify_runner_01)
+_get() { printf '%s' "$_infra_outputs" | jq -r ".$1.value$2"; }
+
+# LXC IPs.
+IP_ADGUARD=$(_get lxc_ips .adguard)
+IP_GATEWAY=$(_get lxc_ips .gateway)
+IP_COOLIFY=$(_get lxc_ips .coolify)
+IP_RUNNER=$( _get lxc_ips .coolify_runner_01)
 ALL_LXC_IPS="$IP_ADGUARD $IP_GATEWAY $IP_COOLIFY $IP_RUNNER"
 
+# Network constants.
+LAN_CIDR=$(   _get network .lan_cidr)
+LAN_GATEWAY=$(_get network .lan_gateway)
+
+# Service URLs.
+COOLIFY_API_URL=$(_get coolify_api_url '')
+
 export IP_ADGUARD IP_GATEWAY IP_COOLIFY IP_RUNNER ALL_LXC_IPS
-unset _lxc_ips_json
+export LAN_CIDR LAN_GATEWAY COOLIFY_API_URL
+unset _infra_outputs
