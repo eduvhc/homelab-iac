@@ -1,7 +1,7 @@
 #!/bin/sh
 # Push this folder to the AdGuard LXC and restart services.
 set -e
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 HOST="root@192.168.50.30"
 python3 -c "import yaml; yaml.safe_load(open(\"AdGuardHome.yaml\"))"
 scp -q AdGuardHome.yaml "$HOST:/opt/AdGuardHome/AdGuardHome.yaml"
