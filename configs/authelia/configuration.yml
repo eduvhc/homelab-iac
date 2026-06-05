@@ -28,4 +28,4 @@ access_control:
       policy: bypass
     - domain:
         - "*.iedora.com"
-      policy: two_factor
+      policy: one_factor
