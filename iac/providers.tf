@@ -18,6 +18,10 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.0"
     }
+    proxmox = {
+      source  = "bpg/proxmox"
+      version = "~> 0.94"
+    }
   }
 
   encryption {
@@ -40,4 +44,16 @@ provider "bitwarden-secrets" {}
 
 provider "cloudflare" {
   api_token = local.cf_api_token
+}
+
+provider "proxmox" {
+  endpoint  = "https://192.168.50.53:8006/"
+  api_token = local.pve_api_token
+  insecure  = true # self-signed cert from PVE installer
+
+  ssh {
+    agent       = false
+    username    = "root"
+    private_key = file("/root/.ssh/id_ed25519") # for resources that need shell, e.g. file uploads
+  }
 }

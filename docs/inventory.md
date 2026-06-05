@@ -55,3 +55,56 @@ physically still plugged but removed from storage config and fstab.
 When real hardware arrives, PBS on a dedicated machine becomes the
 backup target and the HDD is retired entirely.
 
+
+## LXCs as code (bpg/proxmox)
+
+The 4 service LXCs (102, 103, 200, 210) are defined declaratively in
+`iac/lxc.tf`. To resize, retag, repoint, or move to a different PVE node,
+edit the `local.lxcs` map and `tofu apply`.
+
+LXC 101 (ops) is intentionally **not** here — it's where tofu runs. Bootstrap
+manually per `docs/setup-from-scratch.md` Step 0.
+
+### Caveats of using bpg/proxmox
+
+These are the rough edges to know:
+
+- `lifecycle.ignore_changes` skips drift on three fields that are one-shot
+  at LXC creation:
+  - `operating_system.template_file_id` — Coolify install is destructive on
+    template change; we'd nuke the LXC by re-templating. Don't.
+  - `initialization.user_account` — SSH key injection happens at creation;
+    rotating keys is done via direct `authorized_keys` edit, not via tofu.
+  - `network_interface.mac_address` — randomly assigned at creation; tofu
+    wants to manage it, but rotating would force replace.
+- The provider needs the PVE API to be reachable for **every** plan/apply,
+  including for unrelated changes (CF DNS edits, etc.). If PVE is down,
+  tofu is stuck. Accepted trade-off.
+- bpg has historical quirks with LXC features (`nesting`, `keyctl`,
+  `unprivileged`). If you see "feature ... is not supported" errors after
+  a bpg version bump, check `references/coolify` no wait, the bpg repo
+  upstream issues for breaking changes.
+
+### Adding a new LXC
+
+```hcl
+locals {
+  lxcs = {
+    # ... existing entries ...
+    grafana = {
+      vm_id     = 250
+      hostname  = "grafana"
+      ip        = "192.168.50.250/24"
+      cores     = 1
+      memory_mb = 1024
+      swap_mb   = 256
+      disk_gb   = 10
+      tags      = ["obs", "metrics"]
+      features  = { nesting = false, keyctl = false }
+    }
+  }
+}
+```
+
+Then `tofu apply` creates the LXC. Bootstrap remains manual (run the
+relevant `configs/<svc>/scripts/bootstrap.sh` from ops).

@@ -14,10 +14,12 @@ variable "bws_keys" {
   type = object({
     cf_api_token      = string
     coolify_api_token = string
+    pve_api_token     = string
   })
   default = {
     cf_api_token      = "CLOUDFLARE_API_TOKEN"
     coolify_api_token = "COOLIFY_API_TOKEN"
+    pve_api_token     = "PVE_API_TOKEN"
   }
   description = "Names of the BWS secrets to look up (in project: homelab)."
 }
