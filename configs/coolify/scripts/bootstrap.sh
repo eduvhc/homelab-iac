@@ -2,14 +2,14 @@
 # Idempotent bootstrap of a Coolify control plane LXC.
 #
 # Run from an LXC that has: bws CLI + ssh root access to $HOST.
-# Sources COOLIFY_ADMIN_NAME/EMAIL/PASSWORD from BWS, then:
+# Sources IEDORA_ADMIN_NAME/EMAIL/PASSWORD from BWS, then:
 #   1. installs Coolify (if not already installed)
 #   2. creates root user in DB (if no users yet)
 #   3. mints an "Open Tofu" API token (rotated each run)
 #   4. saves the token back into BWS as COOLIFY_API_TOKEN
 #
 # Pre-reqs in BWS project homelab:
-#   COOLIFY_ADMIN_NAME, COOLIFY_ADMIN_EMAIL, IEDORA_ADMIN_PASSWORD
+#   IEDORA_ADMIN_NAME, IEDORA_ADMIN_EMAIL, IEDORA_ADMIN_PASSWORD
 
 set -e
 
@@ -37,8 +37,8 @@ bws_put_or_update() {
 }
 
 echo "==> reading admin creds from BWS"
-ADMIN_NAME=$(bws_get COOLIFY_ADMIN_NAME)
-ADMIN_EMAIL=$(bws_get COOLIFY_ADMIN_EMAIL)
+ADMIN_NAME=$(bws_get IEDORA_ADMIN_NAME)
+ADMIN_EMAIL=$(bws_get IEDORA_ADMIN_EMAIL)
 ADMIN_PASSWORD=$(bws_get IEDORA_ADMIN_PASSWORD)
 for v in "ADMIN_NAME:$ADMIN_NAME" "ADMIN_EMAIL:$ADMIN_EMAIL" "ADMIN_PASSWORD:$ADMIN_PASSWORD"; do
   [ -n "${v#*:}" ] || { echo "ERROR: COOLIFY_${v%:*} missing in BWS"; exit 1; }

@@ -166,8 +166,8 @@ pct set 200 --tags "coolify;control-plane"
 
 Seed BWS with the admin creds **before** bootstrap (they're read FROM there):
 ```bash
-bws secret create COOLIFY_ADMIN_NAME     'Your Name'   <project>
-bws secret create COOLIFY_ADMIN_EMAIL    'you@x.com'   <project>
+bws secret create IEDORA_ADMIN_NAME     'Your Name'   <project>
+bws secret create IEDORA_ADMIN_EMAIL    'you@x.com'   <project>
 bws secret create IEDORA_ADMIN_PASSWORD "$(openssl rand -base64 18 | tr -d /+=)" <project>
 ```
 

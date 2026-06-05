@@ -58,8 +58,8 @@ Secret names used:
 |---|---|---|
 | `TOFU_STATE_PASSPHRASE` | `iac/.envrc` (state encryption) | operator (one time) |
 | `CLOUDFLARE_API_TOKEN` | tofu cloudflare provider | operator (one time) |
-| `COOLIFY_ADMIN_NAME` | `configs/coolify/scripts/bootstrap.sh` | operator (one time) |
-| `COOLIFY_ADMIN_EMAIL` | same | operator (one time) |
+| `IEDORA_ADMIN_NAME` (shared) | `configs/coolify/scripts/bootstrap.sh` | operator (one time) |
+| `IEDORA_ADMIN_EMAIL` (shared) | same | operator (one time) |
 | `IEDORA_ADMIN_PASSWORD` (shared with Authelia) | same | operator (one time) |
 | `COOLIFY_API_TOKEN` | tofu (server resource) | `configs/coolify/scripts/bootstrap.sh` (rotates) |
 
