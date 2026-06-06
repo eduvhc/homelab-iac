@@ -113,23 +113,34 @@ the above: `git add … && git commit && git push`.
 
 ## Secrets
 
-Live in **Bitwarden Secrets Manager** (project: `homelab`). The repo IaC
-references them by name via the `bitwarden/bitwarden-secrets` provider; the
-operational scripts read them via the `bws` CLI.
+Two-tier model:
 
-Secret names used:
+- **BWS** (`homelab` project) — genuine secrets only. Rotatable, never printed.
+- **`iac/.envrc`** — non-secret identifiers + config (account IDs, admin
+  name/email, org IDs). Gitignored, `.envrc.example` is the template.
+- **Coolify UI** — env vars for apps deployed on the platform (DB
+  passwords, JWT secrets, AI keys per app). Never in BWS, never in git.
+
+Secrets in BWS:
 
 | Key | Used by | Who creates it |
 |---|---|---|
-| `TOFU_STATE_PASSPHRASE` | `iac/.envrc` (state encryption, both stacks) | operator (one time) |
+| `TOFU_STATE_PASSPHRASE` | `iac/.envrc` (state encryption, both stacks) | `tools/seed-bws.sh` (random) |
 | `CLOUDFLARE_API_TOKEN` | infra stack: cloudflare provider + `seed-bws.sh` R2 bootstrap | operator (one time) |
 | `PVE_ROOT_PASSWORD` | infra stack: bpg/proxmox provider | operator (one time) |
-| `IEDORA_ADMIN_NAME` (shared) | `services/coolify/bootstrap.sh` | operator (one time) |
-| `IEDORA_ADMIN_EMAIL` (shared) | same | operator (one time) |
-| `IEDORA_ADMIN_PASSWORD` (shared with Authelia) | same | operator (one time) |
+| `IEDORA_ADMIN_PASSWORD` (shared with Authelia) | `services/coolify/bootstrap-user.sh` | `tools/seed-bws.sh` (random) |
 | `COOLIFY_API_TOKEN` | platform stack: terraform_data registrations | `services/coolify/rotate-token.sh` (cron every 25d) |
 | `NTFY_TOPIC` | `tools/drift-check.sh` push notifications | `tools/seed-bws.sh` (random) |
-| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_ACCOUNT_ID` | `iac/.envrc` → tofu s3 backend (state in R2) | `tools/seed-bws.sh` (mints scoped CF token) |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | `iac/.envrc` → tofu s3 backend (state in R2) | `tools/seed-bws.sh` (mints scoped CF token) |
+
+Identifiers in `iac/.envrc` (placeholder values committed in `.envrc.example`):
+
+| Key | What it is |
+|---|---|
+| `BW_ORGANIZATION_ID` | Bitwarden organization UUID |
+| `R2_ACCOUNT_ID` | Cloudflare account ID — builds the R2 S3 endpoint |
+| `IEDORA_ADMIN_NAME` | Display name for Coolify + Authelia admin user |
+| `IEDORA_ADMIN_EMAIL` | Login email for Coolify + Authelia admin user |
 
 Tofu state lives in **Cloudflare R2** (`iedora-iac-state` bucket, native
 S3 locking via `use_lockfile`). The state objects are additionally

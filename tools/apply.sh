@@ -159,5 +159,5 @@ printf '\n\033[1;32m✓ apply complete — homelab converged to desired state\03
 echo "  Coolify UI:  https://coolify.iedora.com"
 echo "  Authelia UI: https://auth.iedora.com"
 echo "  AdGuard UI:  https://adguard.iedora.com (via gateway with SSO)"
-echo "  Admin email: $(bws_get IEDORA_ADMIN_EMAIL)"
+echo "  Admin email: $IEDORA_ADMIN_EMAIL"
 echo "  Admin pass:  bws secret list | jq -r '.[] | select(.key==\"IEDORA_ADMIN_PASSWORD\") | .value'"

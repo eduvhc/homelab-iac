@@ -67,8 +67,7 @@ fi
 # ── Step 2: rotate ───────────────────────────────────────────────────────────
 log_info "rotating Coolify API token: $REASON"
 
-ADMIN_EMAIL=$(bws_get IEDORA_ADMIN_EMAIL)
-[ -n "$ADMIN_EMAIL" ] || die "IEDORA_ADMIN_EMAIL missing in BWS"
+ADMIN_EMAIL=${IEDORA_ADMIN_EMAIL:?must be set in iac/.envrc}
 ESC_EMAIL=$(printf '%s' "$ADMIN_EMAIL" | sed "s/'/'\\\\''/g")
 
 TINKER_CODE=$(cat <<'PHP'

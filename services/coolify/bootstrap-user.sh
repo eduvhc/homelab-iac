@@ -3,7 +3,9 @@
 # if a user with the same email already exists, this is a no-op.
 # Disables open registration after creating the first user.
 #
-# Pre-reqs: install.sh has run; BWS holds IEDORA_ADMIN_{NAME,EMAIL,PASSWORD}.
+# Pre-reqs: install.sh has run.
+# Inputs: IEDORA_ADMIN_{NAME,EMAIL} from iac/.envrc (non-secret config);
+#         IEDORA_ADMIN_PASSWORD from BWS (genuine secret).
 
 set -euo pipefail
 
@@ -18,12 +20,10 @@ require_cmd bws jq ssh
 
 HOST=${COOLIFY_HOST:-192.168.50.200}
 
-ADMIN_NAME=$(bws_get IEDORA_ADMIN_NAME)
-ADMIN_EMAIL=$(bws_get IEDORA_ADMIN_EMAIL)
+ADMIN_NAME=${IEDORA_ADMIN_NAME:?must be set in iac/.envrc}
+ADMIN_EMAIL=${IEDORA_ADMIN_EMAIL:?must be set in iac/.envrc}
 ADMIN_PASSWORD=$(bws_get IEDORA_ADMIN_PASSWORD)
-for pair in "ADMIN_NAME:$ADMIN_NAME" "ADMIN_EMAIL:$ADMIN_EMAIL" "ADMIN_PASSWORD:$ADMIN_PASSWORD"; do
-  [ -n "${pair#*:}" ] || die "IEDORA_${pair%:*} missing in BWS"
-done
+[ -n "$ADMIN_PASSWORD" ] || die "IEDORA_ADMIN_PASSWORD missing in BWS"
 
 ESC_NAME=$(printf '%s' "$ADMIN_NAME" | sed "s/'/'\\\\''/g")
 ESC_EMAIL=$(printf '%s' "$ADMIN_EMAIL" | sed "s/'/'\\\\''/g")

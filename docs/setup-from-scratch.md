@@ -115,9 +115,12 @@ cp /root/iedora-iac/iac/.envrc.example /root/iedora-iac/iac/.envrc
 
 The script is idempotent and:
 - auto-generates `TOFU_STATE_PASSPHRASE`, `IEDORA_ADMIN_PASSWORD`, `NTFY_TOPIC`
-- prompts for `CLOUDFLARE_API_TOKEN`, `PVE_ROOT_PASSWORD`, `IEDORA_ADMIN_NAME`, `IEDORA_ADMIN_EMAIL`
+- prompts for `CLOUDFLARE_API_TOKEN`, `PVE_ROOT_PASSWORD`
 - creates the `iedora-iac-state` R2 bucket + a bucket-scoped R2 API token →
-  saves `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID` to BWS
+  saves `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` to BWS
+- reads `R2_ACCOUNT_ID`, `IEDORA_ADMIN_NAME`, `IEDORA_ADMIN_EMAIL`,
+  `BW_ORGANIZATION_ID` from `iac/.envrc` (you set these once when copying
+  from `.envrc.example`)
 - skips any secret that already exists
 
 `COOLIFY_API_TOKEN` is created later, by `tools/apply.sh` (Phase 5 of the

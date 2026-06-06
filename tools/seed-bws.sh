@@ -2,6 +2,13 @@
 # Seed every BWS secret needed by iedora-iac. Idempotent — re-running only
 # creates missing entries (existing ones are reported as [skip]).
 #
+# Rule of thumb: BWS holds genuine secrets only — values that are rotatable
+# and must never appear in plaintext logs (CF/Coolify/PVE/R2 tokens, DB
+# state passphrase, admin password). Identifiers + non-secret config
+# (account IDs, admin name/email, org IDs) belong in iac/.envrc.
+# App-runtime secrets (DB passwords, JWT secrets, AI keys for deployed
+# apps) belong in the Coolify UI as env vars on the app — never here.
+#
 # Usage:
 #   tools/seed-bws.sh [-h|--help]
 #
@@ -11,7 +18,7 @@
 #
 # Pre-reqs:
 #   - bws CLI installed, BWS_ACCESS_TOKEN exported (or /root/.bws-token present)
-#   - BW_ORGANIZATION_ID exported OR available in iac/.envrc
+#   - iac/.envrc populated (BW_ORGANIZATION_ID, R2_ACCOUNT_ID, IEDORA_ADMIN_*)
 #   - A BWS project named "homelab" (override with BWS_PROJECT_NAME)
 
 set -eu
@@ -112,22 +119,6 @@ else
   printf '%-30s %s\n' "[skip] PVE_ROOT_PASSWORD" ""
 fi
 
-if ! bws_has IEDORA_ADMIN_NAME; then
-  prompt ADMIN_NAME_VAL "Admin display name (e.g. Eduardo)"
-  seed_secret IEDORA_ADMIN_NAME "Display name used by Coolify + Authelia bootstrap." \
-    read_from_var ADMIN_NAME_VAL
-else
-  printf '%-30s %s\n' "[skip] IEDORA_ADMIN_NAME" ""
-fi
-
-if ! bws_has IEDORA_ADMIN_EMAIL; then
-  prompt ADMIN_EMAIL_VAL "Admin email (Coolify + Authelia login)"
-  seed_secret IEDORA_ADMIN_EMAIL "Login email for Coolify + Authelia." \
-    read_from_var ADMIN_EMAIL_VAL
-else
-  printf '%-30s %s\n' "[skip] IEDORA_ADMIN_EMAIL" ""
-fi
-
 seed_secret IEDORA_ADMIN_PASSWORD \
   "Admin password for Coolify + Authelia. Auto-generated — change via UIs if you want a memorable one." \
   rand24
@@ -149,7 +140,7 @@ fi
 echo
 log_step "2/2" "R2 backend (bucket + scoped API token)"
 
-if bws_has R2_ACCESS_KEY_ID && bws_has R2_SECRET_ACCESS_KEY && bws_has R2_ACCOUNT_ID; then
+if bws_has R2_ACCESS_KEY_ID && bws_has R2_SECRET_ACCESS_KEY; then
   printf '%-30s %s\n' "[skip] R2_*" "(R2 backend already seeded)"
 else
   CF_TOKEN=$(bws_get CLOUDFLARE_API_TOKEN)
@@ -159,8 +150,10 @@ else
   R2_BUCKET=${R2_BUCKET:-iedora-iac-state}
   R2_LOCATION=${R2_LOCATION:-weur}
 
-  ACCOUNT_ID=$(cf_account_id_for_zone iedora.com)
-  [ -n "$ACCOUNT_ID" ] || die "failed to fetch account_id — token may lack Zone:Read"
+  # ACCOUNT_ID comes from iac/.envrc (non-secret identifier). Fall back to
+  # discovery via CF API for first-time setup where .envrc isn't filled yet.
+  ACCOUNT_ID=${R2_ACCOUNT_ID:-$(cf_account_id_for_zone iedora.com)}
+  [ -n "$ACCOUNT_ID" ] || die "R2_ACCOUNT_ID not in .envrc and discovery failed — token may lack Zone:Read"
   log_info "account_id = $ACCOUNT_ID"
 
   # Bucket — idempotent (code 10004 = already exists).
@@ -202,9 +195,7 @@ else
     "R2 access key ID (bucket-scoped). Minted by seed-bws.sh."
   bws_create R2_SECRET_ACCESS_KEY "$SECRET" \
     "R2 secret access key (SHA-256 of the underlying CF API token value)."
-  bws_create R2_ACCOUNT_ID "$ACCOUNT_ID" \
-    "Cloudflare account ID — builds the R2 S3 endpoint: https://\$ACCOUNT_ID.r2.cloudflarestorage.com"
-  log_info "minted R2 token id=$KEY_ID + saved 3 secrets to BWS"
+  log_info "minted R2 token id=$KEY_ID (account_id stays in iac/.envrc, not BWS)"
 fi
 
 echo
