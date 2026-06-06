@@ -1,5 +1,5 @@
 #!/bin/sh
-# Seed every secret needed by iedora-iac into iac/secrets.sops.yaml.
+# Seed every secret needed by homelab-iac into iac/secrets.sops.yaml.
 # Idempotent — re-running only fills missing entries; existing ones are
 # reported as [skip] and never overwritten.
 #
@@ -163,7 +163,7 @@ else
   #   Secret Access Key = SHA-256 of the token value
   R2_RESOURCE="com.cloudflare.edge.r2.bucket.${ACCOUNT_ID}_default_${R2_BUCKET}"
   TOKEN_BODY=$(jq -nc --arg r "$R2_RESOURCE" '{
-    name: ("iedora-iac-tofu-state-" + (now | tostring | split(".")[0])),
+    name: ("homelab-iac-tofu-state-" + (now | tostring | split(".")[0])),
     policies: [{
       effect: "allow",
       permission_groups: [

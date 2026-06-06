@@ -163,7 +163,7 @@ cloudflared service install <SAME_TUNNEL_TOKEN>
 ```
 Agora se um node cair, o outro continua a servir. Custo: 0 (CF não cobra por conns extra).
 
-## Updates ao iedora-iac
+## Updates ao homelab-iac
 
 O repo OpenTofu vai precisar de pouco:
 

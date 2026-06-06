@@ -7,7 +7,7 @@
 #   . "$(cd "$(dirname "$0")" && pwd)/../tools/lib/common.sh"
 #
 # After sourcing, the following are defined:
-#   $REPO_ROOT      absolute path to the iedora-iac repo
+#   $REPO_ROOT      absolute path to the homelab-iac repo
 #   log_info ...    informational (stdout, dim gray)
 #   log_step N/T m  numbered step (stdout, bright blue)
 #   log_warn ...    warning (stderr, yellow)

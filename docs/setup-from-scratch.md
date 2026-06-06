@@ -94,7 +94,7 @@ via the steps below.
 #    Append the new recipient under `keys:` with an anchor, then add the
 #    anchor reference under each creation rule's `key_groups[0].age`.
 #
-#    Example: adding eduardo_windows to iedora-iac/.sops.yaml:
+#    Example: adding eduardo_windows to homelab-iac/.sops.yaml:
 #      keys:
 #        - &eduardo_mac      age1867...
 #        - &eduardo_ops      age1gr7u...
@@ -107,8 +107,8 @@ via the steps below.
 #                - *eduardo_ops
 #                - *eduardo_windows             ← add this line
 
-# 3. Re-wrap the DEK for the new recipient (run in iedora-iac and iedora):
-cd ~/projects/personal/iedora-iac
+# 3. Re-wrap the DEK for the new recipient (run in homelab-iac and iedora):
+cd ~/projects/personal/homelab-iac
 sops updatekeys -y iac/secrets.sops.yaml
 
 cd ~/projects/personal/iedora
@@ -177,9 +177,9 @@ cat /root/.ssh/id_ed25519.pub
 Clone the repo:
 
 ```bash
-git clone git@github.com:eduvhc/iedora-iac.git /root/iedora-iac
+git clone git@github.com:eduvhc/homelab-iac.git /root/homelab-iac
 # References (upstream source for grep/read) are NOT submodules — fetch on demand:
-# /root/iedora-iac/tools/fetch-references.sh [<name>]
+# /root/homelab-iac/tools/fetch-references.sh [<name>]
 ```
 
 Push the age private key from the operator's machine to the ops LXC so
@@ -195,15 +195,15 @@ ssh root@<ops-ip> 'chmod 600 ~/.config/sops/age/keys.txt'
 Bootstrap the `.envrc` template:
 
 ```bash
-cp /root/iedora-iac/iac/.envrc.example /root/iedora-iac/iac/.envrc
-# Edit /root/iedora-iac/iac/.envrc → set R2_ACCOUNT_ID, IEDORA_ADMIN_NAME/EMAIL,
+cp /root/homelab-iac/iac/.envrc.example /root/homelab-iac/iac/.envrc
+# Edit /root/homelab-iac/iac/.envrc → set R2_ACCOUNT_ID, IEDORA_ADMIN_NAME/EMAIL,
 # (NTFY_TOPIC stays as placeholder until seed-secrets.sh suggests one)
 ```
 
 ## Phase 1 — Seed encrypted secrets
 
 ```bash
-/root/iedora-iac/tools/seed-secrets.sh
+/root/homelab-iac/tools/seed-secrets.sh
 ```
 
 The script is idempotent and:
@@ -227,7 +227,7 @@ apply orchestrator below).
 After secrets are seeded, the rebuild is a single command from the ops LXC:
 
 ```bash
-cd /root/iedora-iac
+cd /root/homelab-iac
 tools/apply.sh
 # See `tools/apply.sh --help` for the per-phase breakdown.
 ```

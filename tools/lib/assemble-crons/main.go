@@ -19,7 +19,7 @@
 //	name:        unique identifier (must be unique across all services)
 //	schedule:    crontab time spec (e.g. "0 4 */25 * *")
 //	command:     path to executable; repo-relative is rewritten to absolute
-//	             /root/iedora-iac/<command>
+//	             /root/homelab-iac/<command>
 //	log:         absolute path to log file
 //	user:        optional, defaults to "root"
 //	description: optional, free-form (becomes #-comments above the line)
@@ -127,12 +127,12 @@ func main() {
 }
 
 // resolveCommand rewrites a repo-relative path to its on-host absolute path
-// (the ops LXC clones the repo at /root/iedora-iac). Absolute paths pass through.
+// (the ops LXC clones the repo at /root/homelab-iac). Absolute paths pass through.
 func resolveCommand(cmd string) string {
 	if strings.HasPrefix(cmd, "/") {
 		return cmd
 	}
-	return "/root/iedora-iac/" + cmd
+	return "/root/homelab-iac/" + cmd
 }
 
 func fatalf(format string, args ...any) {

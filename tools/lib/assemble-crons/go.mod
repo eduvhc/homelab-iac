@@ -1,4 +1,4 @@
-module iedora-iac/tools/lib/assemble-crons
+module homelab-iac/tools/lib/assemble-crons
 
 go 1.25.9
 
