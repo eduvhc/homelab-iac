@@ -14,7 +14,7 @@
 #
 # Pre-reqs:
 #   - $REPO_ROOT set to the homelab-iac repo root
-#   - .envrc already sourced (TF_VAR_tf_state_passphrase set)
+#   - source_envrc has run (TF_VAR_tf_state_passphrase set)
 #   - stacks/infra is initialized and applied at least once
 
 set -e

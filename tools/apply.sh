@@ -16,8 +16,8 @@
 #   8. sync ops LXC cron jobs           (assembled from services/*/cron.yaml)
 #
 # Pre-reqs:
-#   - All secrets seeded (tools/seed-secrets.sh)
-#   - iac/.envrc populated (copy from iac/.envrc.example)
+#   - All secrets + identifiers seeded (tools/seed-secrets.sh)
+#   - sops + age installed; age private key at ~/.config/sops/age/keys.txt
 #   - Ops LXC has /root/.ssh/id_ed25519 trusted by PVE root
 #
 # LXC IPs are NEVER hardcoded here. After Phase 1, tools/lib/lxc-ips.sh

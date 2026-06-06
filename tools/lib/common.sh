@@ -27,14 +27,17 @@
 # Optional xtrace via env (debugging without editing the script).
 [ "${TRACE:-0}" = "1" ] && set -x
 
-# ── Repo root: works whether sourced from tools/, services/<svc>/<sub>/,
-# or apps/<name>/. Relies on $0 being the calling script. ───────────────────
-_COMMON_DIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
-REPO_ROOT=${_COMMON_DIR%/tools*}
-REPO_ROOT=${REPO_ROOT%/services*}
-REPO_ROOT=${REPO_ROOT%/apps*}
+# ── Repo root: derive from $0 when sourced by a script in tools/, services/,
+# or apps/. Cross-repo consumers (e.g. iedora/infra/tofu/.envrc) pre-set
+# REPO_ROOT to point at this repo's root before sourcing; honour that. ───────
+if [ -z "${REPO_ROOT:-}" ]; then
+  _COMMON_DIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
+  REPO_ROOT=${_COMMON_DIR%/tools*}
+  REPO_ROOT=${REPO_ROOT%/services*}
+  REPO_ROOT=${REPO_ROOT%/apps*}
+  unset _COMMON_DIR
+fi
 export REPO_ROOT
-unset _COMMON_DIR
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 if [ -t 2 ] && [ "${NO_COLOR:-0}" != "1" ]; then
@@ -67,13 +70,45 @@ require_cmd() {
   [ -z "$_missing" ] || die "missing required command(s):$_missing"
 }
 
-# source_envrc — source iac/.envrc (which exports sops-decrypted secrets +
-# R2 backend vars + identifiers) once.
+# source_envrc — decrypt iac/secrets.sops.yaml and export all 11 keys
+# (secrets + identifiers) into the environment, then apply adapter mappings
+# (TF_VAR_* for tofu, AWS_* for the R2 s3 backend). Single source of truth.
 # Idempotent: subsequent calls are no-ops within the same shell.
+#
+# Pre-reqs: sops + age on PATH; age private key at ~/.config/sops/age/keys.txt.
+# POSIX-clean (works under dash / Debian /bin/sh).
 source_envrc() {
   [ "${_ENVRC_SOURCED:-0}" = "1" ] && return 0
-  [ -f "$REPO_ROOT/iac/.envrc" ] || die "iac/.envrc not found — copy from iac/.envrc.example"
-  # shellcheck disable=SC1091
-  . "$REPO_ROOT/iac/.envrc"
+  [ -f "$REPO_ROOT/iac/secrets.sops.yaml" ] || die "iac/secrets.sops.yaml not found"
+
+  # Decrypt the dotenv view into a temp file and read line-by-line. We
+  # don't `. "$file"` because sops's dotenv output is unquoted, so values
+  # containing shell metacharacters (e.g. COOLIFY_API_TOKEN = "id|token")
+  # would be interpreted as pipelines. The read/export loop treats every
+  # value as a literal string.
+  _envrc_tmp=$(mktemp)
+  sops -d --output-type dotenv "$REPO_ROOT/iac/secrets.sops.yaml" > "$_envrc_tmp"
+  while IFS='=' read -r _k _v; do
+    [ -n "$_k" ] && [ "${_k#\#}" = "$_k" ] && export "$_k=$_v"
+  done < "$_envrc_tmp"
+  rm -f "$_envrc_tmp"
+  unset _envrc_tmp _k _v
+
+  # Adapter: tofu variable names (TF_VAR_x → `variable "x" {}` blocks).
+  # Use ${VAR:-} so this survives `set -u` even mid-bootstrap when some
+  # keys may not yet be seeded; downstream tofu/aws will surface a clearer
+  # error than "unbound variable" from this layer.
+  export TF_VAR_tf_state_passphrase="${TOFU_STATE_PASSPHRASE:-}"
+  export TF_VAR_cf_api_token="${CLOUDFLARE_API_TOKEN:-}"
+  export TF_VAR_pve_root_password="${PVE_ROOT_PASSWORD:-}"
+  export TF_VAR_coolify_api_token="${COOLIFY_API_TOKEN:-}"
+  export TF_VAR_r2_account_id="${R2_ACCOUNT_ID:-}"
+
+  # R2 backend for tofu state (S3-compat; AWS_* are what the s3 backend reads).
+  export AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID:-}"
+  export AWS_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY:-}"
+  export AWS_REGION=auto
+  export AWS_ENDPOINT_URL_S3="https://${R2_ACCOUNT_ID:-}.r2.cloudflarestorage.com"
+
   _ENVRC_SOURCED=1
 }

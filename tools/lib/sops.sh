@@ -1,7 +1,7 @@
 # shellcheck shell=sh
 # SOPS+age helpers — replacement for the old BWS layer.
 #
-# Pre-reqs (callers set these — typically by sourcing iac/.envrc first):
+# Pre-reqs (typically satisfied by calling source_envrc from common.sh):
 #   - `sops` on PATH (https://github.com/getsops/sops releases)
 #   - `age` on PATH (apt install age)
 #   - age private key at ~/.config/sops/age/keys.txt (chmod 600)

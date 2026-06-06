@@ -6,7 +6,8 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO_ROOT=${SCRIPT_DIR%/services/*}
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # shellcheck disable=SC1091
-. "$REPO_ROOT/iac/.envrc"
+. "$REPO_ROOT/tools/lib/common.sh"
+source_envrc
 # shellcheck disable=SC1091
 . "$REPO_ROOT/tools/lib/lxc-ips.sh"
 # shellcheck disable=SC1091

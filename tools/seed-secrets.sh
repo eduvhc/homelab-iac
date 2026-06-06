@@ -4,21 +4,21 @@
 # reported as [skip] and never overwritten.
 #
 # Boundary:
-#   - secrets.sops.yaml = rotatable platform secrets, encrypted with age
-#   - iac/.envrc        = identifiers + non-secret config (R2_ACCOUNT_ID,
-#                         IEDORA_ADMIN_NAME/EMAIL, NTFY_TOPIC)
+#   - secrets.sops.yaml = rotatable platform secrets AND identifiers
+#                         (R2_ACCOUNT_ID, IEDORA_ADMIN_NAME/EMAIL, NTFY_TOPIC),
+#                         encrypted with age — single source of truth
 #   - Coolify UI        = app-runtime secrets (per deployed app) — not here
 #
 # Usage:
 #   tools/seed-secrets.sh [-h|--help]
 #
 # Bootstraps in order:
-#   1. Static secrets (auto-generated or prompted into encrypted yaml)
-#   2. Cloudflare R2 backend for tofu state (bucket + scoped API token)
+#   1. Identifiers (prompted if missing; NTFY_TOPIC auto-generated)
+#   2. Static secrets (auto-generated or prompted into encrypted yaml)
+#   3. Cloudflare R2 backend for tofu state (bucket + scoped API token)
 #
 # Pre-reqs:
 #   - sops + age on PATH; age private key at ~/.config/sops/age/keys.txt
-#   - iac/.envrc populated (R2_ACCOUNT_ID etc.) — needed for R2 endpoint
 #   - On first run, iac/secrets.sops.yaml is created from scratch.
 
 set -eu
@@ -34,9 +34,6 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 case "${1:-}" in
   -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
-
-# Loose source (some scripts run before .envrc exists; tolerate it).
-[ -f "$REPO_ROOT/iac/.envrc" ] && . "$REPO_ROOT/iac/.envrc" >/dev/null 2>&1 || true
 
 require_cmd sops age jq curl openssl
 
@@ -59,6 +56,13 @@ prompt_secret() {
   eval "$1=\$_v"
 }
 
+# prompt_plain VAR_NAME LABEL — like prompt_secret but with echo, for
+# non-secret identifiers (name, email, account id) that have no defaults.
+prompt_plain() {
+  printf '%s: ' "$2" >&2; read -r _v
+  eval "$1=\$_v"
+}
+
 # seed_secret KEY DESCRIPTION VALUE_PROVIDER…
 #   VALUE_PROVIDER is a command that prints the value to stdout (e.g. `rand24`).
 #   If absent in sops file, create with the provider's output; else skip.
@@ -76,10 +80,45 @@ seed_secret() {
 # read_from_var VAR_NAME — print the named variable's value (for seed_secret).
 read_from_var() { eval "printf '%s' \"\$$1\""; }
 
-# ── 1. Static secrets ────────────────────────────────────────────────────────
+# ── 1. Identifiers (non-secret config, but co-located in sops as single
+#       source of truth). Prompt only when missing; no defaults. ──────────────
 
 echo
-log_step "1/2" "static secrets"
+log_step "1/3" "identifiers"
+
+if ! sops_has R2_ACCOUNT_ID; then
+  echo >&2
+  echo "Cloudflare account id (32-hex; dash → Workers → right-hand panel)." >&2
+  prompt_plain R2_ACCT_VAL "  R2_ACCOUNT_ID"
+  seed_secret R2_ACCOUNT_ID "Cloudflare account id" read_from_var R2_ACCT_VAL
+else
+  printf '%-30s %s\n' "[skip] R2_ACCOUNT_ID" ""
+fi
+
+if ! sops_has IEDORA_ADMIN_NAME; then
+  prompt_plain ADMIN_NAME_VAL "  IEDORA_ADMIN_NAME (display name for Coolify/Authelia)"
+  seed_secret IEDORA_ADMIN_NAME "Coolify+Authelia admin display name" read_from_var ADMIN_NAME_VAL
+else
+  printf '%-30s %s\n' "[skip] IEDORA_ADMIN_NAME" ""
+fi
+
+if ! sops_has IEDORA_ADMIN_EMAIL; then
+  prompt_plain ADMIN_EMAIL_VAL "  IEDORA_ADMIN_EMAIL (login email for Coolify/Authelia)"
+  seed_secret IEDORA_ADMIN_EMAIL "Coolify+Authelia admin email" read_from_var ADMIN_EMAIL_VAL
+else
+  printf '%-30s %s\n' "[skip] IEDORA_ADMIN_EMAIL" ""
+fi
+
+# NTFY_TOPIC: not secret per se (threat model = spam) but unguessable so
+# only the operator's phone receives drift alerts. Auto-generate if absent.
+seed_secret NTFY_TOPIC \
+  "ntfy.sh topic slug for drift alerts — subscribe at https://ntfy.sh/<topic>" \
+  sh -c 'printf "iedora-drift-%s" "$(openssl rand -hex 20 | head -c 16)"'
+
+# ── 2. Static secrets ────────────────────────────────────────────────────────
+
+echo
+log_step "2/3" "static secrets"
 
 seed_secret TOFU_STATE_PASSPHRASE \
   "OpenTofu state encryption passphrase (PBKDF2-AES-GCM)" \
@@ -116,19 +155,10 @@ seed_secret IEDORA_ADMIN_PASSWORD \
   "Bootstrap admin password for Coolify + Authelia. Change in UI after first login." \
   rand24
 
-# NTFY_TOPIC is not a secret — print one if NTFY_TOPIC isn't already set in
-# iac/.envrc, so operator can paste it there.
-if [ -z "${NTFY_TOPIC:-}" ]; then
-  _topic="iedora-drift-$(rand40 | head -c 16)"
-  log_info "NTFY_TOPIC unset in .envrc — suggested value:"
-  log_info "  export NTFY_TOPIC=\"$_topic\""
-  log_info "  → also subscribe on phone at https://ntfy.sh/$_topic"
-fi
-
-# ── 2. Cloudflare R2 backend for tofu state ──────────────────────────────────
+# ── 3. Cloudflare R2 backend for tofu state ──────────────────────────────────
 
 echo
-log_step "2/2" "R2 backend (bucket + scoped API token)"
+log_step "3/3" "R2 backend (bucket + scoped API token)"
 
 if sops_has R2_ACCESS_KEY_ID && sops_has R2_SECRET_ACCESS_KEY; then
   printf '%-30s %s\n' "[skip] R2_*" "(R2 backend already seeded)"
@@ -140,10 +170,11 @@ else
   R2_BUCKET=${R2_BUCKET:-homelab-iac-state}
   R2_LOCATION=${R2_LOCATION:-weur}
 
-  # ACCOUNT_ID comes from iac/.envrc (non-secret identifier). Fall back to
-  # discovery via CF API for first-time setup where .envrc isn't filled yet.
-  ACCOUNT_ID=${R2_ACCOUNT_ID:-$(cf_account_id_for_zone iedora.com)}
-  [ -n "$ACCOUNT_ID" ] || die "R2_ACCOUNT_ID not in .envrc and discovery failed — token may lack Zone:Read"
+  # ACCOUNT_ID comes from sops (seeded in phase 1). Fall back to discovery
+  # via CF API for first-time setup where the operator skipped the prompt.
+  ACCOUNT_ID=$(sops_get R2_ACCOUNT_ID)
+  [ -n "$ACCOUNT_ID" ] || ACCOUNT_ID=$(cf_account_id_for_zone iedora.com)
+  [ -n "$ACCOUNT_ID" ] || die "R2_ACCOUNT_ID not in sops and discovery failed — token may lack Zone:Read"
   log_info "account_id = $ACCOUNT_ID"
 
   # Bucket — idempotent (code 10004 = already exists).

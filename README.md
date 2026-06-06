@@ -118,19 +118,17 @@ header comment with its source file, so the operator sees who owns it.
 | Rotate any other secret | `sops iac/secrets.sops.yaml` (interactive editor) | `git commit && push` |
 | Add a new operator (2nd age key) | append to `.sops.yaml` recipients | `sops updatekeys iac/secrets.sops.yaml` |
 
-Both tofu stacks share `iac/.envrc` (one `source` covers both). After any of
-the above: `git add … && git commit && git push`.
+After any of the above: `git add … && git commit && git push`.
 
 ## Secrets
 
-Three-tier model, organized by lifecycle:
+Two-tier model, organized by lifecycle:
 
-- **`iac/secrets.sops.yaml`** — genuine secrets, encrypted with **age** via
-  **sops**. Committed to git in encrypted form; decrypted on every shell
-  source by `iac/.envrc`. Edit with `sops iac/secrets.sops.yaml`.
-- **`iac/.envrc`** — non-secret identifiers + config (account IDs, admin
-  name/email, org IDs). Gitignored; `.envrc.example` is the committed
-  template with placeholders.
+- **`iac/secrets.sops.yaml`** — single source for all homelab config:
+  genuine secrets *and* non-secret identifiers (account IDs, admin
+  name/email, ntfy topic), encrypted with **age** via **sops**. Committed
+  to git in encrypted form; exported into the shell on every `tofu`
+  invocation. Edit with `sops iac/secrets.sops.yaml`.
 - **Coolify UI** — env vars for apps deployed on the platform (DB
   passwords, JWT secrets, AI keys per app). Never duplicated elsewhere.
 
@@ -145,25 +143,20 @@ machine (Mac + ops LXC).
 > including `TOFU_STATE_PASSPHRASE`, which means tofu state in R2 also
 > becomes unreadable.
 
-Secrets in `iac/secrets.sops.yaml`, grouped by lifecycle:
+Entries in `iac/secrets.sops.yaml`, grouped by lifecycle:
 
-| Key | Group | Used by | Who creates it |
-|---|---|---|---|
-| `TOFU_STATE_PASSPHRASE` | bootstrap | `iac/.envrc` (state encryption) | `tools/seed-secrets.sh` (random; one-time forever) |
-| `IEDORA_ADMIN_PASSWORD` | bootstrap | `services/coolify/bootstrap-user.sh` | `tools/seed-secrets.sh` (random; change in UI after first login) |
-| `CLOUDFLARE_API_TOKEN` | reactive | infra stack (cloudflare provider) + `seed-secrets.sh` R2 bootstrap | operator pastes once; revokes + replaces freely |
-| `PVE_ROOT_PASSWORD` | reactive | infra stack (bpg/proxmox provider) | operator (set at PVE install) |
-| `COOLIFY_API_TOKEN` | reactive | platform stack: terraform_data registrations | `services/coolify/rotate-token.sh` (operator-driven, ≥25d cadence) |
-| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | reactive | `iac/.envrc` → tofu s3 backend | `tools/seed-secrets.sh` (mints scoped CF token) |
-
-Identifiers + non-secret config in `iac/.envrc` (committed in `.envrc.example`):
-
-| Key | What it is |
-|---|---|
-| `R2_ACCOUNT_ID` | Cloudflare account ID — builds the R2 S3 endpoint |
-| `IEDORA_ADMIN_NAME` | Display name for Coolify + Authelia admin user |
-| `IEDORA_ADMIN_EMAIL` | Login email for Coolify + Authelia admin user |
-| `NTFY_TOPIC` | ntfy.sh topic slug for drift alerts (threat model: spam only) |
+| Key | Kind | Group | Used by | Who creates it |
+|---|---|---|---|---|
+| `TOFU_STATE_PASSPHRASE` | secret | bootstrap | tofu state encryption block | `tools/seed-secrets.sh` (random; one-time forever) |
+| `IEDORA_ADMIN_PASSWORD` | secret | bootstrap | `services/coolify/bootstrap-user.sh` | `tools/seed-secrets.sh` (random; change in UI after first login) |
+| `CLOUDFLARE_API_TOKEN` | secret | reactive | infra stack (cloudflare provider) + `seed-secrets.sh` R2 bootstrap | operator pastes once; revokes + replaces freely |
+| `PVE_ROOT_PASSWORD` | secret | reactive | infra stack (bpg/proxmox provider) | operator (set at PVE install) |
+| `COOLIFY_API_TOKEN` | secret | reactive | platform stack: terraform_data registrations | `services/coolify/rotate-token.sh` (operator-driven, ≥25d cadence) |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | secret | reactive | tofu s3 backend | `tools/seed-secrets.sh` (mints scoped CF token) |
+| `R2_ACCOUNT_ID` | identifier | config | tofu s3 backend (R2 endpoint URL) | operator (prompted by `seed-secrets.sh`) |
+| `IEDORA_ADMIN_NAME` | identifier | config | Coolify + Authelia admin user | operator (prompted by `seed-secrets.sh`) |
+| `IEDORA_ADMIN_EMAIL` | identifier | config | Coolify + Authelia admin user | operator (prompted by `seed-secrets.sh`) |
+| `NTFY_TOPIC` | identifier | config | drift-check alerts (threat model: spam only) | `tools/seed-secrets.sh` (random suggestion) |
 
 Tofu state lives in **Cloudflare R2** (`homelab-iac-state` bucket, native
 S3 locking via `use_lockfile`). The state objects are additionally

@@ -192,14 +192,6 @@ scp ~/.config/sops/age/keys.txt root@<ops-ip>:~/.config/sops/age/keys.txt
 ssh root@<ops-ip> 'chmod 600 ~/.config/sops/age/keys.txt'
 ```
 
-Bootstrap the `.envrc` template:
-
-```bash
-cp /root/homelab-iac/iac/.envrc.example /root/homelab-iac/iac/.envrc
-# Edit /root/homelab-iac/iac/.envrc → set R2_ACCOUNT_ID, IEDORA_ADMIN_NAME/EMAIL,
-# (NTFY_TOPIC stays as placeholder until seed-secrets.sh suggests one)
-```
-
 ## Phase 1 — Seed encrypted secrets
 
 ```bash
@@ -211,9 +203,11 @@ The script is idempotent and:
   registered in `.sops.yaml`
 - auto-generates `TOFU_STATE_PASSPHRASE`, `IEDORA_ADMIN_PASSWORD`
 - prompts for `CLOUDFLARE_API_TOKEN`, `PVE_ROOT_PASSWORD`
+- prompts for identifiers: `R2_ACCOUNT_ID`, `IEDORA_ADMIN_NAME`, `IEDORA_ADMIN_EMAIL`
 - creates the `homelab-iac-state` R2 bucket + a bucket-scoped R2 API token →
   saves `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` into the encrypted file
-- prints a suggested `NTFY_TOPIC` for `iac/.envrc` (not a secret)
+- generates a random `NTFY_TOPIC` (not a secret, but kept in sops as the
+  single source of homelab config)
 - skips any key that already exists
 
 After this, **commit + push** `iac/secrets.sops.yaml` — the encrypted file
