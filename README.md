@@ -1,4 +1,4 @@
-# iedora-iac
+# homelab-iac
 
 Single source of truth for the iedora.com **homelab** on Proxmox VE.
 Agnostic of any specific app — apps run on top (via Coolify) and own
