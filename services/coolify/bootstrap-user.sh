@@ -1,12 +1,18 @@
 #!/bin/bash
-# Create the Coolify root user from secrets-managed credentials. Idempotent:
-# if a user with the same email already exists, this is a no-op.
-# Disables open registration after creating the first user.
+# Create or update the Coolify root user from sops-managed credentials.
+# Idempotent: creates user on first run, updates password on subsequent
+# runs if HOMELAB_ADMIN_PASSWORD changed.
 #
 # Pre-reqs: install.sh has run.
 # Inputs (all from iac/secrets.sops.yaml via source_envrc):
 #   HOMELAB_ADMIN_NAME, HOMELAB_ADMIN_EMAIL — identifiers
-#   HOMELAB_ADMIN_PASSWORD — bootstrap password
+#   HOMELAB_ADMIN_PASSWORD                  — admin password
+#
+# Coolify's User model marks `password` fillable but doesn't auto-hash on
+# save (no `'hashed'` cast). We Hash::make() explicitly, and use
+# Hash::check() to make password updates idempotent — only re-hash if the
+# stored hash doesn't verify the current password. Email is lowercased by
+# Coolify's setEmailAttribute mutator, so we lowercase before query too.
 
 set -euo pipefail
 
@@ -33,13 +39,19 @@ use App\Models\Team;
 use App\Models\InstanceSettings;
 use Illuminate\Support\Facades\Hash;
 
-$email = getenv('COOLIFY_BOOTSTRAP_EMAIL');
+$email = strtolower(getenv('COOLIFY_BOOTSTRAP_EMAIL'));
 $name  = getenv('COOLIFY_BOOTSTRAP_NAME');
 $pass  = getenv('COOLIFY_BOOTSTRAP_PASS');
 
 $existing = User::firstWhere('email', $email);
 if ($existing) {
-    echo "USER_EXISTS=" . $existing->id . PHP_EOL;
+    if (!Hash::check($pass, $existing->password)) {
+        $existing->password = Hash::make($pass);
+        $existing->save();
+        echo "USER_PW_UPDATED=" . $existing->id . PHP_EOL;
+    } else {
+        echo "USER_UNCHANGED=" . $existing->id . PHP_EOL;
+    }
     return;
 }
 
@@ -59,16 +71,17 @@ echo "USER_CREATED=" . $user->id . PHP_EOL;
 PHP
 )
 
-log_info "create root user if absent"
+log_info "ensure root user + password matches sops"
 result=$(ssh root@"$HOST" \
   "docker exec -e COOLIFY_BOOTSTRAP_NAME='$ESC_NAME' \
      -e COOLIFY_BOOTSTRAP_EMAIL='$ESC_EMAIL' \
      -e COOLIFY_BOOTSTRAP_PASS='$ESC_PASS' \
      coolify php artisan tinker --execute=$(printf '%q' "$TINKER_CODE")" \
-  | grep -oE 'USER_(EXISTS|CREATED)=[0-9]+' | head -1)
+  | grep -oE 'USER_(UNCHANGED|PW_UPDATED|CREATED)=[0-9]+' | head -1)
 
 case "$result" in
-  USER_EXISTS=*)  log_info "user already exists (id=${result#USER_EXISTS=})" ;;
-  USER_CREATED=*) log_info "user created (id=${result#USER_CREATED=})" ;;
-  *)              die "unexpected output: $result" ;;
+  USER_UNCHANGED=*)  log_info "user unchanged (id=${result#USER_UNCHANGED=})" ;;
+  USER_PW_UPDATED=*) log_info "user password updated (id=${result#USER_PW_UPDATED=})" ;;
+  USER_CREATED=*)    log_info "user created (id=${result#USER_CREATED=})" ;;
+  *)                 die "unexpected output: $result" ;;
 esac

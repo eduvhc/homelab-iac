@@ -1,7 +1,0 @@
-users:
-  eduvhc:
-    displayname: "Eduardo"
-    password: "$argon2id$v=19$m=65536,t=3,p=4$crIjYVIM1yEIc8GPqOBd0Q$QAtC2tloEa1wPf9Lcin6jtCAqHdTO1Ti4jKeEz0Pmuw"
-    email: eduardoferdcarvalho@gmail.com
-    groups:
-      - admins
