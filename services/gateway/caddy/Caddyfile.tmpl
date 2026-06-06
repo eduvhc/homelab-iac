@@ -3,7 +3,10 @@
     # Behind cloudflared tunnel which terminates TLS at CF edge; serve plain HTTP internally
     auto_https off
     servers {
-        trusted_proxies static ${IP_COOLIFY} 127.0.0.1
+        # Both cloudflared connectors (HA): coolify LXC + runner LXC. Without
+        # the runner here, Authelia rejects forward_auth from connector 210
+        # because X-Forwarded-Proto isn't trusted → "insecure scheme 'http'".
+        trusted_proxies static ${IP_COOLIFY} ${IP_RUNNER} 127.0.0.1
     }
     # Default access log for all sites. zstd rolling added in Caddy 2.11
     # (roll_gzip is deprecated, slated for removal).
