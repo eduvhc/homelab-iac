@@ -4,7 +4,7 @@ terraform {
   # R2 backend (see iac/stacks/infra/providers.tf for full rationale).
   # Different `key` keeps the two stacks' state files apart in the bucket.
   backend "s3" {
-    bucket                      = "iedora-iac-state"
+    bucket                      = "homelab-iac-state"
     key                         = "platform/terraform.tfstate"
     region                      = "auto"
     use_lockfile                = true

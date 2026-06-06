@@ -11,7 +11,7 @@
 #   - The ops LXC (101) — where this runs
 #   - iac/secrets.sops.yaml — survives (reusable by next apply)
 #   - Cloudflare zone — only the records/tunnel we created
-#   - R2 bucket iedora-iac-state — survives (holds tofu state itself)
+#   - R2 bucket homelab-iac-state — survives (holds tofu state itself)
 #
 # Order is REVERSE of apply.sh: platform → infra. Platform depends on infra
 # (terraform_remote_state), so it must be destroyed first while infra state

@@ -165,7 +165,7 @@ Identifiers + non-secret config in `iac/.envrc` (committed in `.envrc.example`):
 | `IEDORA_ADMIN_EMAIL` | Login email for Coolify + Authelia admin user |
 | `NTFY_TOPIC` | ntfy.sh topic slug for drift alerts (threat model: spam only) |
 
-Tofu state lives in **Cloudflare R2** (`iedora-iac-state` bucket, native
+Tofu state lives in **Cloudflare R2** (`homelab-iac-state` bucket, native
 S3 locking via `use_lockfile`). The state objects are additionally
 PBKDF2-AES-GCM encrypted by the `encryption{}` block with
 `TOFU_STATE_PASSPHRASE` — defense in depth if the R2 keys leak.

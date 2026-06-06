@@ -137,7 +137,7 @@ else
   export CF_TOKEN
   [ -n "$CF_TOKEN" ] || die "CLOUDFLARE_API_TOKEN missing from $SOPS_FILE"
 
-  R2_BUCKET=${R2_BUCKET:-iedora-iac-state}
+  R2_BUCKET=${R2_BUCKET:-homelab-iac-state}
   R2_LOCATION=${R2_LOCATION:-weur}
 
   # ACCOUNT_ID comes from iac/.envrc (non-secret identifier). Fall back to

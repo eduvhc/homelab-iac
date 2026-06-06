@@ -4,7 +4,7 @@
 data "terraform_remote_state" "infra" {
   backend = "s3"
   config = {
-    bucket                      = "iedora-iac-state"
+    bucket                      = "homelab-iac-state"
     key                         = "infra/terraform.tfstate"
     region                      = "auto"
     skip_credentials_validation = true

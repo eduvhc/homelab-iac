@@ -211,7 +211,7 @@ The script is idempotent and:
   registered in `.sops.yaml`
 - auto-generates `TOFU_STATE_PASSPHRASE`, `IEDORA_ADMIN_PASSWORD`
 - prompts for `CLOUDFLARE_API_TOKEN`, `PVE_ROOT_PASSWORD`
-- creates the `iedora-iac-state` R2 bucket + a bucket-scoped R2 API token →
+- creates the `homelab-iac-state` R2 bucket + a bucket-scoped R2 API token →
   saves `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` into the encrypted file
 - prints a suggested `NTFY_TOPIC` for `iac/.envrc` (not a secret)
 - skips any key that already exists
@@ -325,7 +325,7 @@ fresh age key to regenerate `TOFU_STATE_PASSPHRASE` etc., then re-encrypt
 all tofu state (`tofu init -migrate-state` after editing the encryption
 block to use the old → new passphrase mapping).
 
-**Corrupted R2 state**: `aws s3 cp s3://iedora-iac-state/infra/terraform.tfstate /backup/`
+**Corrupted R2 state**: `aws s3 cp s3://homelab-iac-state/infra/terraform.tfstate /backup/`
 should be a daily cron (TODO — not yet implemented, candidate for
 `iac/cron.yaml`). For now, the only safety net is OpenTofu's
 encryption + R2's 24h soft-delete window.

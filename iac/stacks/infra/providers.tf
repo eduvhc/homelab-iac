@@ -10,7 +10,7 @@ terraform {
   # encrypted by the encryption{} block below — defense in depth if R2
   # keys leak.
   backend "s3" {
-    bucket                      = "iedora-iac-state"
+    bucket                      = "homelab-iac-state"
     key                         = "infra/terraform.tfstate"
     region                      = "auto"
     use_lockfile                = true
