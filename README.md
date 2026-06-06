@@ -148,14 +148,14 @@ Entries in `iac/secrets.sops.yaml`, grouped by lifecycle:
 | Key | Kind | Group | Used by | Who creates it |
 |---|---|---|---|---|
 | `TOFU_STATE_PASSPHRASE` | secret | bootstrap | tofu state encryption block | `tools/seed-secrets.sh` (random; one-time forever) |
-| `IEDORA_ADMIN_PASSWORD` | secret | bootstrap | `services/coolify/bootstrap-user.sh` | `tools/seed-secrets.sh` (random; change in UI after first login) |
+| `HOMELAB_ADMIN_PASSWORD` | secret | bootstrap | `services/coolify/bootstrap-user.sh` | `tools/seed-secrets.sh` (random; change in UI after first login) |
 | `CLOUDFLARE_API_TOKEN` | secret | reactive | infra stack (cloudflare provider) + `seed-secrets.sh` R2 bootstrap | operator pastes once; revokes + replaces freely |
 | `PVE_ROOT_PASSWORD` | secret | reactive | infra stack (bpg/proxmox provider) | operator (set at PVE install) |
 | `COOLIFY_API_TOKEN` | secret | reactive | platform stack: terraform_data registrations | `services/coolify/rotate-token.sh` (operator-driven, ≥25d cadence) |
 | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | secret | reactive | tofu s3 backend | `tools/seed-secrets.sh` (mints scoped CF token) |
 | `R2_ACCOUNT_ID` | identifier | config | tofu s3 backend (R2 endpoint URL) | operator (prompted by `seed-secrets.sh`) |
-| `IEDORA_ADMIN_NAME` | identifier | config | Coolify + Authelia admin user | operator (prompted by `seed-secrets.sh`) |
-| `IEDORA_ADMIN_EMAIL` | identifier | config | Coolify + Authelia admin user | operator (prompted by `seed-secrets.sh`) |
+| `HOMELAB_ADMIN_NAME` | identifier | config | Coolify + Authelia admin user | operator (prompted by `seed-secrets.sh`) |
+| `HOMELAB_ADMIN_EMAIL` | identifier | config | Coolify + Authelia admin user | operator (prompted by `seed-secrets.sh`) |
 | `NTFY_TOPIC` | identifier | config | drift-check alerts (threat model: spam only) | `tools/seed-secrets.sh` (random suggestion) |
 
 Tofu state lives in **Cloudflare R2** (`homelab-iac-state` bucket, native

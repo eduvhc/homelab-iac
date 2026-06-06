@@ -69,7 +69,7 @@ fi
 # ── Step 2: rotate ───────────────────────────────────────────────────────────
 log_info "rotating Coolify API token: $REASON"
 
-ADMIN_EMAIL=${IEDORA_ADMIN_EMAIL:?must be in iac/secrets.sops.yaml}
+ADMIN_EMAIL=${HOMELAB_ADMIN_EMAIL:?must be in iac/secrets.sops.yaml}
 ESC_EMAIL=$(printf '%s' "$ADMIN_EMAIL" | sed "s/'/'\\\\''/g")
 
 TINKER_CODE=$(cat <<'PHP'

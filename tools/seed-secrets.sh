@@ -5,7 +5,7 @@
 #
 # Boundary:
 #   - secrets.sops.yaml = rotatable platform secrets AND identifiers
-#                         (R2_ACCOUNT_ID, IEDORA_ADMIN_NAME/EMAIL, NTFY_TOPIC),
+#                         (R2_ACCOUNT_ID, HOMELAB_ADMIN_NAME/EMAIL, NTFY_TOPIC),
 #                         encrypted with age — single source of truth
 #   - Coolify UI        = app-runtime secrets (per deployed app) — not here
 #
@@ -95,18 +95,18 @@ else
   printf '%-30s %s\n' "[skip] R2_ACCOUNT_ID" ""
 fi
 
-if ! sops_has IEDORA_ADMIN_NAME; then
-  prompt_plain ADMIN_NAME_VAL "  IEDORA_ADMIN_NAME (display name for Coolify/Authelia)"
-  seed_secret IEDORA_ADMIN_NAME "Coolify+Authelia admin display name" read_from_var ADMIN_NAME_VAL
+if ! sops_has HOMELAB_ADMIN_NAME; then
+  prompt_plain ADMIN_NAME_VAL "  HOMELAB_ADMIN_NAME (display name for Coolify/Authelia)"
+  seed_secret HOMELAB_ADMIN_NAME "Coolify+Authelia admin display name" read_from_var ADMIN_NAME_VAL
 else
-  printf '%-30s %s\n' "[skip] IEDORA_ADMIN_NAME" ""
+  printf '%-30s %s\n' "[skip] HOMELAB_ADMIN_NAME" ""
 fi
 
-if ! sops_has IEDORA_ADMIN_EMAIL; then
-  prompt_plain ADMIN_EMAIL_VAL "  IEDORA_ADMIN_EMAIL (login email for Coolify/Authelia)"
-  seed_secret IEDORA_ADMIN_EMAIL "Coolify+Authelia admin email" read_from_var ADMIN_EMAIL_VAL
+if ! sops_has HOMELAB_ADMIN_EMAIL; then
+  prompt_plain ADMIN_EMAIL_VAL "  HOMELAB_ADMIN_EMAIL (login email for Coolify/Authelia)"
+  seed_secret HOMELAB_ADMIN_EMAIL "Coolify+Authelia admin email" read_from_var ADMIN_EMAIL_VAL
 else
-  printf '%-30s %s\n' "[skip] IEDORA_ADMIN_EMAIL" ""
+  printf '%-30s %s\n' "[skip] HOMELAB_ADMIN_EMAIL" ""
 fi
 
 # NTFY_TOPIC: not secret per se (threat model = spam) but unguessable so
@@ -151,7 +151,7 @@ else
   printf '%-30s %s\n' "[skip] PVE_ROOT_PASSWORD" ""
 fi
 
-seed_secret IEDORA_ADMIN_PASSWORD \
+seed_secret HOMELAB_ADMIN_PASSWORD \
   "Bootstrap admin password for Coolify + Authelia. Change in UI after first login." \
   rand24
 

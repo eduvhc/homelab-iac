@@ -201,9 +201,9 @@ ssh root@<ops-ip> 'chmod 600 ~/.config/sops/age/keys.txt'
 The script is idempotent and:
 - creates `iac/secrets.sops.yaml` (if missing) — encrypted with the age key
   registered in `.sops.yaml`
-- auto-generates `TOFU_STATE_PASSPHRASE`, `IEDORA_ADMIN_PASSWORD`
+- auto-generates `TOFU_STATE_PASSPHRASE`, `HOMELAB_ADMIN_PASSWORD`
 - prompts for `CLOUDFLARE_API_TOKEN`, `PVE_ROOT_PASSWORD`
-- prompts for identifiers: `R2_ACCOUNT_ID`, `IEDORA_ADMIN_NAME`, `IEDORA_ADMIN_EMAIL`
+- prompts for identifiers: `R2_ACCOUNT_ID`, `HOMELAB_ADMIN_NAME`, `HOMELAB_ADMIN_EMAIL`
 - creates the `homelab-iac-state` R2 bucket + a bucket-scoped R2 API token →
   saves `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` into the encrypted file
 - generates a random `NTFY_TOPIC` (not a secret, but kept in sops as the

@@ -3,6 +3,7 @@
 *_override.tf.json
 .bw-provider-state
 .envrc
+.decrypted~*
 .terraform/
 crash.*.log
 crash.log

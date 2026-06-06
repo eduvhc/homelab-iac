@@ -5,8 +5,8 @@
 #
 # Pre-reqs: install.sh has run.
 # Inputs (all from iac/secrets.sops.yaml via source_envrc):
-#   IEDORA_ADMIN_NAME, IEDORA_ADMIN_EMAIL — identifiers
-#   IEDORA_ADMIN_PASSWORD — bootstrap password
+#   HOMELAB_ADMIN_NAME, HOMELAB_ADMIN_EMAIL — identifiers
+#   HOMELAB_ADMIN_PASSWORD — bootstrap password
 
 set -euo pipefail
 
@@ -19,9 +19,9 @@ require_cmd jq ssh
 
 HOST=${COOLIFY_HOST:-192.168.50.200}
 
-ADMIN_NAME=${IEDORA_ADMIN_NAME:?must be in iac/secrets.sops.yaml}
-ADMIN_EMAIL=${IEDORA_ADMIN_EMAIL:?must be in iac/secrets.sops.yaml}
-ADMIN_PASSWORD=${IEDORA_ADMIN_PASSWORD:?must be in iac/secrets.sops.yaml}
+ADMIN_NAME=${HOMELAB_ADMIN_NAME:?must be in iac/secrets.sops.yaml}
+ADMIN_EMAIL=${HOMELAB_ADMIN_EMAIL:?must be in iac/secrets.sops.yaml}
+ADMIN_PASSWORD=${HOMELAB_ADMIN_PASSWORD:?must be in iac/secrets.sops.yaml}
 
 ESC_NAME=$(printf '%s' "$ADMIN_NAME" | sed "s/'/'\\\\''/g")
 ESC_EMAIL=$(printf '%s' "$ADMIN_EMAIL" | sed "s/'/'\\\\''/g")
