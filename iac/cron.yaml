@@ -1,0 +1,17 @@
+# IaC-wide cron jobs — concerns of the IaC system itself, not of any one
+# service. Drift detection lives here because it spans both tofu stacks.
+# Future candidates: state-backup sync, security scans, repo-level health.
+#
+# Service-scoped crons live in services/<svc>/cron.yaml instead (e.g.
+# token rotation belongs to the service that owns the token).
+#
+# Both file locations are assembled into /etc/cron.d/iac on the ops LXC by
+# tools/lib/assemble-crons (Go).
+
+- name: iac-drift-check
+  schedule: "30 6 * * *"       # daily at 06:30 UTC
+  command: tools/drift-check.sh
+  log: /var/log/iac-drift.log
+  description: |
+    Daily IaC drift detection across both stacks. On drift → ntfy push
+    + log to the file above.

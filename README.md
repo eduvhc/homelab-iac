@@ -47,16 +47,16 @@ services/
   ├── coolify-runner-01/    LXC 210: Docker engine (+ cloudflared replica)
   │   ├── lxc.yaml
   │   └── bootstrap.sh
-  ├── cloudflared/          virtual service (runs on 200 + 210 for HA)
-  │   └── install.sh
-  └── ops/                  ops LXC config (not tofu-managed)
-      └── iac.cron          declarative /etc/cron.d/iac
+  └── cloudflared/          virtual service (runs on 200 + 210 for HA)
+      └── install.sh
 
-iac/stacks/
-  ├── infra/                OpenTofu: discovers services/*/lxc.yaml +
-  │                         services/*/tunnel-routes.yaml via fileset(),
-  │                         creates LXCs + CF tunnel + DNS.
-  └── platform/             OpenTofu: Coolify-side objects (runner registration)
+iac/
+  ├── stacks/
+  │   ├── infra/            OpenTofu: discovers services/*/lxc.yaml +
+  │   │                     services/*/tunnel-routes.yaml via fileset(),
+  │   │                     creates LXCs + CF tunnel + DNS.
+  │   └── platform/         OpenTofu: Coolify-side objects (runner registration)
+  └── cron.yaml             IaC-wide cron jobs (drift detection)
 
 tools/                      Operator scripts:
                             • apply.sh     — converge to desired state
@@ -84,12 +84,16 @@ tools/apply.sh         # idempotent: infra → bootstraps → cloudflared → pl
 
 To **tear down everything**: `tools/destroy.sh` (asks for confirmation).
 
-Cron jobs are declared **per-service** in `services/<svc>/cron.yaml`
-(currently: `services/coolify/cron.yaml` for token rotation,
-`services/ops/cron.yaml` for drift detection). `apply.sh` runs
-`tools/lib/assemble-crons.py` to merge them into `/etc/cron.d/iac` on the
-ops LXC. Adding a new periodic task = drop a `cron.yaml` in the owning
-service's folder; nothing else to wire up.
+Cron jobs are declared by their **owner**, in two places by convention:
+
+- `services/<svc>/cron.yaml` — jobs that maintain a single service (e.g.
+  `services/coolify/cron.yaml` rotates Coolify's API token)
+- `iac/cron.yaml` — IaC-wide jobs that don't belong to a single service
+  (e.g. drift detection, which spans both stacks)
+
+`apply.sh` runs `tools/lib/assemble-crons` (Go) which merges both
+locations into `/etc/cron.d/iac` on the ops LXC. Each line carries a
+header comment with its source file, so the operator sees who owns it.
 
 **To make changes**:
 
