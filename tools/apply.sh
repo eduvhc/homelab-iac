@@ -116,6 +116,14 @@ COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/install.sh"
 COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/bootstrap-user.sh"
 COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/rotate-token.sh"
 
+# rotate-token.sh wrote a new COOLIFY_API_TOKEN to sops, but it ran in its
+# own subshell — its `export` doesn't reach us. Re-export from sops so the
+# platform stack (phase 6) sees the fresh value via TF_VAR_coolify_api_token.
+COOLIFY_API_TOKEN=$(sops -d --output-type dotenv "$REPO_ROOT/iac/secrets.sops.yaml" \
+  | awk -F= '$1=="COOLIFY_API_TOKEN"{sub(/^[^=]*=/,""); print; exit}')
+export COOLIFY_API_TOKEN
+export TF_VAR_coolify_api_token="$COOLIFY_API_TOKEN"
+
 # ── 6. Platform stack ───────────────────────────────────────────────────────
 log_step "6/8" "tofu apply — stacks/platform (register runner in Coolify)"
 cd "$PLATFORM_DIR"
