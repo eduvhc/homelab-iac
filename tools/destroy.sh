@@ -1,5 +1,5 @@
 #!/bin/bash
-# Destroy: tear down the iedora homelab. Destroys everything tofu manages
+# Destroy: tear down the homelab. Destroys everything tofu manages
 # (LXCs 102/103/200/210 + CF tunnel + DNS records + Coolify-side objects).
 # Counterpart to tools/apply.sh.
 #

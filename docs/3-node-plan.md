@@ -170,7 +170,7 @@ O repo OpenTofu vai precisar de pouco:
 1. **Variáveis em `variables.tf`**: adicionar `cloudflared_replicas = 1` (futuro multi-node)
 2. **Outputs**: já temos `tunnel_token` - reutilizável
 3. **Novo módulo** (opcional, futuro): `modules/pve-host/` que descreve um node PVE como recurso (mas o provider Proxmox é frágil; talvez não valha)
-4. **Repo paralelo** sugestão: `iedora-pve` com a config dos nodes (LXCs, VMs, storages) via provider `bpg/proxmox` - **só** quando o cluster estiver estável; tentar antes é dor.
+4. **Repo paralelo** sugestão: `homelab-pve` com a config dos nodes (LXCs, VMs, storages) via provider `bpg/proxmox` - **só** quando o cluster estiver estável; tentar antes é dor.
 
 ## Riscos e mitigações
 
@@ -199,6 +199,6 @@ Coisas para considerar depois de tudo estável:
 
 - [ ] Avaliar se queres HA para o Coolify (precisa replication + cluster stable)
 - [ ] Avaliar Ceph se acrescentares 10 GbE (raro em homelab)
-- [ ] Configurar `iedora-pve` IaC (LXCs declarativos)
+- [ ] Configurar `homelab-pve` IaC (LXCs declarativos)
 - [ ] Adicionar monitoring (Prometheus + Grafana ou Netdata Cloud)
 - [ ] Adicionar 1 VM NixOS para experimentação contínua

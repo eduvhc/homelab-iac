@@ -1,14 +1,14 @@
 # Cloudflare zone lookup (single source for account_id + zone_id; the API
 # token must be scoped to this zone).
-data "cloudflare_zone" "iedora" {
+data "cloudflare_zone" "homelab" {
   filter = {
     name = var.domain
   }
 }
 
 locals {
-  cf_account_id = data.cloudflare_zone.iedora.account.id
-  cf_zone_id    = data.cloudflare_zone.iedora.id
+  cf_account_id = data.cloudflare_zone.homelab.account.id
+  cf_zone_id    = data.cloudflare_zone.homelab.id
 }
 
 resource "random_id" "coolify_tunnel_secret" {

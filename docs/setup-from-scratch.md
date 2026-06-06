@@ -1,6 +1,6 @@
 # Setup from scratch
 
-End-to-end procedure to rebuild the iedora homelab from a clean PVE host.
+End-to-end procedure to rebuild the homelab from a clean PVE host.
 
 ## Architecture in 30 seconds
 
@@ -169,7 +169,7 @@ curl -fsSL "https://github.com/getsops/sops/releases/download/${SOPS_VER}/sops-$
 
 # SSH key the ops LXC uses to: (a) ssh to other LXCs from bootstrap scripts,
 # (b) ssh to PVE host for the bpg provider, (c) clone the repo from GitHub.
-ssh-keygen -t ed25519 -C "ops-lxc@iedora" -f /root/.ssh/id_ed25519 -N ""
+ssh-keygen -t ed25519 -C "ops-lxc@homelab" -f /root/.ssh/id_ed25519 -N ""
 echo "→ paste the following into github.com/settings/keys AND into PVE's /root/.ssh/authorized_keys:"
 cat /root/.ssh/id_ed25519.pub
 ```

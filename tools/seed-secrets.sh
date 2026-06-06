@@ -113,7 +113,7 @@ fi
 # only the operator's phone receives drift alerts. Auto-generate if absent.
 seed_secret NTFY_TOPIC \
   "ntfy.sh topic slug for drift alerts — subscribe at https://ntfy.sh/<topic>" \
-  sh -c 'printf "iedora-drift-%s" "$(openssl rand -hex 20 | head -c 16)"'
+  sh -c 'printf "homelab-drift-%s" "$(openssl rand -hex 20 | head -c 16)"'
 
 # ── 2. Static secrets ────────────────────────────────────────────────────────
 

@@ -32,7 +32,7 @@ notify() {
   # args: title body priority(default 3)
   [ -n "$NTFY_TOPIC" ] || return 0
   curl -fsS \
-    -H "Title: $1" -H "Priority: ${3:-3}" -H "Tags: warning,iedora" \
+    -H "Title: $1" -H "Priority: ${3:-3}" -H "Tags: warning,homelab" \
     -d "$2" "https://ntfy.sh/$NTFY_TOPIC" >/dev/null 2>&1 || \
     log "WARN: ntfy POST failed"
 }
@@ -53,12 +53,12 @@ check_stack() {
       _summary=$(grep -E '^Plan:|will be (created|updated|destroyed|replaced)' "/tmp/drift-$_name.txt" \
         | sed -E 's/\x1b\[[0-9;]*m//g' | head -10)
       log "  $_summary"
-      notify "iedora drift: $_name" "$_summary" 4
+      notify "homelab drift: $_name" "$_summary" 4
       ;;
     *)
       log "$_name: ERROR (tofu plan exit=$_rc)"
       tail -20 "/tmp/drift-$_name.txt" | sed 's/^/  /' | tee -a "$LOG"
-      notify "iedora drift-check ERROR: $_name" "tofu plan exit=$_rc — see $LOG" 5
+      notify "homelab drift-check ERROR: $_name" "tofu plan exit=$_rc — see $LOG" 5
       ;;
   esac
   return $_rc
