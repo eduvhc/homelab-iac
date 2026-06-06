@@ -40,7 +40,7 @@ About to DESTROY:
   • LXCs 102 (adguard), 103 (gateway), 200 (coolify), 210 (runner)
     → every app deployed by Coolify is wiped
     → Authelia user DB + AdGuard query logs are lost
-  • Cloudflare tunnel "coolify-iedora" + 4 DNS records
+  • Cloudflare tunnel "coolify-tunnel" + 4 DNS records
   • Coolify-side: registered server, private_key
 
 EOF

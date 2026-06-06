@@ -17,7 +17,7 @@ resource "random_id" "coolify_tunnel_secret" {
 
 resource "cloudflare_zero_trust_tunnel_cloudflared" "coolify" {
   account_id    = local.cf_account_id
-  name          = "coolify-iedora"
+  name          = "coolify-tunnel"
   tunnel_secret = random_id.coolify_tunnel_secret.b64_std
 }
 
