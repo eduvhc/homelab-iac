@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Apply: converge the iedora homelab to the desired state. Idempotent — safe
 # to re-run. Use tools/destroy.sh for tear-down.
 #
