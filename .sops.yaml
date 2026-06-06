@@ -1,5 +1,6 @@
-# Sops creation rules — every secrets.sops.yaml in this repo is encrypted
-# with the operator age key. Add more recipients here as needed.
+# Sops creation rules — every encrypted file in this repo is encrypted with
+# the operator age key. Add more recipients by appending to the `age:` list
+# and running `sops updatekeys <file>` to re-encrypt existing files.
 creation_rules:
   - path_regex: secrets\.sops\.yaml$
     age: age1867kx5pchlg2aty9tqhwvlyyjn6p2rmxlrn9czszusqjdu2acp9qakhet5
