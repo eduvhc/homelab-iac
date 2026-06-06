@@ -28,8 +28,9 @@ unset _k _v _envrc_dir
 
 # ─── OpenTofu variable bindings (one TF_VAR_x per declared var) ────────────
 # These map decrypted env vars → tofu's `variable "x" {}` blocks.
-# Identifiers (R2_ACCOUNT_ID) also get a TF_VAR_ alias so apps/<x>/ stacks
-# can consume them without hard-coding.
+# tf_state_passphrase + cf_api_token + r2_account_id are also consumed
+# CROSS-REPO by app-side tofu stacks (e.g. iedora/infra/tofu/r2/) — those
+# live in app repos but expect this .envrc to be sourced first.
 export TF_VAR_tf_state_passphrase="$TOFU_STATE_PASSPHRASE"
 export TF_VAR_cf_api_token="$CLOUDFLARE_API_TOKEN"
 export TF_VAR_pve_root_password="$PVE_ROOT_PASSWORD"

@@ -1,6 +1,8 @@
 # iedora-iac
 
-Single source of truth for the iedora.com homelab on Proxmox VE.
+Single source of truth for the iedora.com **homelab** on Proxmox VE.
+Agnostic of any specific app — apps run on top (via Coolify) and own
+their own infra (e.g. R2 buckets, env vars) in their own repos.
 
 ```
 PVE host (Beelink N100 today, 3-node cluster soon)
@@ -58,15 +60,6 @@ iac/
   │   └── platform/         OpenTofu: Coolify-side objects (runner registration)
   └── cron.yaml             IaC-wide cron jobs (drift detection)
 
-apps/                       Workloads deployed ON Coolify (1 folder per app)
-  └── iedora-web/           External infra for the app (CF R2 bucket + creds).
-      ├── providers.tf      ← own backend key (scoped state per app)
-      ├── main.tf           ← R2 bucket + CORS + bucket-scoped token + outputs
-      └── README.md         ← what's here + what to paste in Coolify UI
-
-                            Coolify-side resources (project, postgres, app,
-                            env vars) live in the Coolify UI — not in tofu.
-
 tools/                      Operator scripts:
                             • apply.sh         — converge to desired state
                             • destroy.sh       — tear down everything
@@ -118,7 +111,6 @@ header comment with its source file, so the operator sees who owns it.
 | Resize/move an LXC | `services/<svc>/lxc.yaml` (`cores`, `memory_mb`, `node`, …) | `tofu apply` in `iac/stacks/infra` |
 | Add a CF tunnel route | `services/<svc>/tunnel-routes.yaml` | `tofu apply` in `iac/stacks/infra` |
 | Add a Coolify runner server | new `services/coolify-runner-NN/` + `iac/stacks/platform/runner.tf` | `tofu apply` in `iac/stacks/platform` |
-| Add a new Coolify app (external infra only) | `cp -r apps/iedora-web apps/<new>` + edit backend key + main.tf | `tofu -chdir=apps/<new> init && apply` |
 | Edit AdGuard rewrites/filters | `services/adguard/AdGuardHome.yaml.tmpl` | `services/adguard/sync.sh` |
 | Add an Authelia OIDC client | `services/gateway/authelia/configuration.yml` | `services/gateway/authelia/sync.sh` |
 | Add a Caddy reverse proxy entry | `services/gateway/caddy/Caddyfile.tmpl` | `services/gateway/caddy/sync.sh` |
