@@ -9,38 +9,28 @@
 #   • days_to_expiry > ROTATE_THRESHOLD_DAYS → no-op (with status line)
 #   • else                                   → mint
 #
-# Both tools/apply.sh AND the 25-day cron (services/ops/iac.cron) call this
-# script unconditionally; the expiry check is what makes the rerun safe.
-# Coolify tokens have a 30-day TTL, so the cron's 25-day cadence + the 7-day
-# threshold means the token is refreshed with ~5 days of slack.
+# Both tools/apply.sh AND the 25-day cron (services/coolify/cron.yaml) call
+# this script; the expiry check is what makes the rerun safe.
 #
-# Pre-reqs: install.sh + bootstrap-user.sh have run; user with email
-# IEDORA_ADMIN_EMAIL exists in Coolify.
+# Pre-reqs: install.sh + bootstrap-user.sh have run.
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_ROOT=${SCRIPT_DIR%/services/*}
-[ -f "$REPO_ROOT/iac/.envrc" ] && . "$REPO_ROOT/iac/.envrc" >/dev/null 2>&1 || true
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/../../tools/lib/common.sh"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/../../tools/lib/bws.sh"
+
+source_envrc
+require_cmd bws jq ssh
 
 HOST=${COOLIFY_HOST:-192.168.50.200}
-PROJECT=${BWS_HOMELAB_PROJECT_ID:-e0f72a13-b559-44cc-a2a7-b44b01860f39}
 THRESHOLD=${ROTATE_THRESHOLD_DAYS:-7}
+BWS_PROJECT_ID=${BWS_HOMELAB_PROJECT_ID:-$(bws_project_id_by_name "${BWS_PROJECT_NAME:-homelab}")}
+export BWS_PROJECT_ID
 
-bws_get() {
-  bws secret list --output json | jq -r --arg k "$1" '.[] | select(.key==$k) | .value'
-}
-bws_put_or_update() {
-  existing_id=$(bws secret list --output json | jq -r --arg k "$1" '.[] | select(.key==$k) | .id')
-  if [ -n "$existing_id" ] && [ "$existing_id" != "null" ]; then
-    bws secret edit "$existing_id" --value "$2" >/dev/null
-  else
-    bws secret create "$1" "$2" "$PROJECT" --note "$3" >/dev/null
-  fi
-}
-
-# ── Step 1: decide whether to rotate (each branch either exits 0 or falls
-#           through with $REASON set). ───────────────────────────────────────
+# ── Step 1: decide whether to rotate ─────────────────────────────────────────
 REASON=""
 
 if [ "${FORCE:-0}" = "1" ]; then
@@ -61,16 +51,12 @@ echo (int) floor(now()->diffInDays(\$t->expires_at, false));'" 2>/dev/null \
       | grep -E '^(-?[0-9]+|MISSING|NEVER)$' | tail -1 | tr -d '\r')
 
     case "$DAYS_LEFT" in
-      MISSING)
-        REASON="BWS holds token id=$TOKEN_ID but it doesn't exist in Coolify DB (stale)" ;;
-      NEVER)
-        echo "==> token id=$TOKEN_ID never expires — skipping rotation"
-        exit 0 ;;
-      ''|*[!0-9-]*)
-        REASON="couldn't determine expiry (got: '$DAYS_LEFT') — rotating defensively" ;;
+      MISSING) REASON="BWS holds token id=$TOKEN_ID but it doesn't exist in Coolify DB (stale)" ;;
+      NEVER)   log_info "token id=$TOKEN_ID never expires — skipping rotation"; exit 0 ;;
+      ''|*[!0-9-]*) REASON="couldn't determine expiry (got: '$DAYS_LEFT') — rotating defensively" ;;
       *)
         if [ "$DAYS_LEFT" -gt "$THRESHOLD" ]; then
-          echo "==> token id=$TOKEN_ID valid for $DAYS_LEFT more days (> $THRESHOLD) — no-op"
+          log_info "token id=$TOKEN_ID valid for $DAYS_LEFT more days (> $THRESHOLD) — no-op"
           exit 0
         fi
         REASON="token id=$TOKEN_ID expires in $DAYS_LEFT day(s) (≤ $THRESHOLD)" ;;
@@ -78,11 +64,11 @@ echo (int) floor(now()->diffInDays(\$t->expires_at, false));'" 2>/dev/null \
   fi
 fi
 
-# ── Step 2: rotate ────────────────────────────────────────────────────────────
-echo "==> rotating Coolify API token: $REASON"
+# ── Step 2: rotate ───────────────────────────────────────────────────────────
+log_info "rotating Coolify API token: $REASON"
 
 ADMIN_EMAIL=$(bws_get IEDORA_ADMIN_EMAIL)
-[ -n "$ADMIN_EMAIL" ] || { echo "ERROR: IEDORA_ADMIN_EMAIL missing in BWS"; exit 1; }
+[ -n "$ADMIN_EMAIL" ] || die "IEDORA_ADMIN_EMAIL missing in BWS"
 ESC_EMAIL=$(printf '%s' "$ADMIN_EMAIL" | sed "s/'/'\\\\''/g")
 
 TINKER_CODE=$(cat <<'PHP'
@@ -112,9 +98,9 @@ TOKEN=$(ssh root@"$HOST" \
      coolify php artisan tinker --execute=$(printf '%q' "$TINKER_CODE")" \
   | grep -oE 'TOKEN=[0-9]+\|[A-Za-z0-9]+' | sed 's/^TOKEN=//' | head -1)
 
-[ -n "$TOKEN" ] || { echo "ERROR: failed to mint Coolify API token"; exit 1; }
+[ -n "$TOKEN" ] || die "failed to mint Coolify API token"
 
 bws_put_or_update COOLIFY_API_TOKEN "$TOKEN" \
   "Coolify API token (read+write). Managed by services/coolify/rotate-token.sh — 30-day TTL, refreshed when <7d remain."
 
-echo "==> rotated → new id=${TOKEN%%|*}, expires in 30 days"
+log_info "rotated → new id=${TOKEN%%|*}, expires in 30 days"

@@ -14,6 +14,10 @@
 
 set -eu
 
+case "${1:-}" in
+  -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+esac
+
 # name<TAB>url<TAB>branch
 REFS='AdGuardHome	https://github.com/AdguardTeam/AdGuardHome.git	master
 opentofu	https://github.com/opentofu/opentofu.git	main

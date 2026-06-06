@@ -5,24 +5,24 @@
 #
 # Pre-reqs: install.sh has run; BWS holds IEDORA_ADMIN_{NAME,EMAIL,PASSWORD}.
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_ROOT=${SCRIPT_DIR%/services/*}
-[ -f "$REPO_ROOT/iac/.envrc" ] && . "$REPO_ROOT/iac/.envrc" >/dev/null 2>&1 || true
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/../../tools/lib/common.sh"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/../../tools/lib/bws.sh"
+
+source_envrc
+require_cmd bws jq ssh
 
 HOST=${COOLIFY_HOST:-192.168.50.200}
 
-bws_get() {
-  bws secret list --output json | jq -r --arg k "$1" '.[] | select(.key==$k) | .value'
-}
-
-echo "==> read admin creds from BWS"
 ADMIN_NAME=$(bws_get IEDORA_ADMIN_NAME)
 ADMIN_EMAIL=$(bws_get IEDORA_ADMIN_EMAIL)
 ADMIN_PASSWORD=$(bws_get IEDORA_ADMIN_PASSWORD)
-for v in "ADMIN_NAME:$ADMIN_NAME" "ADMIN_EMAIL:$ADMIN_EMAIL" "ADMIN_PASSWORD:$ADMIN_PASSWORD"; do
-  [ -n "${v#*:}" ] || { echo "ERROR: IEDORA_${v%:*} missing in BWS"; exit 1; }
+for pair in "ADMIN_NAME:$ADMIN_NAME" "ADMIN_EMAIL:$ADMIN_EMAIL" "ADMIN_PASSWORD:$ADMIN_PASSWORD"; do
+  [ -n "${pair#*:}" ] || die "IEDORA_${pair%:*} missing in BWS"
 done
 
 ESC_NAME=$(printf '%s' "$ADMIN_NAME" | sed "s/'/'\\\\''/g")
@@ -46,9 +46,7 @@ if ($existing) {
 }
 
 $user = (new User)->forceFill([
-    'id' => 0,
-    'name' => $name,
-    'email' => $email,
+    'id' => 0, 'name' => $name, 'email' => $email,
     'password' => Hash::make($pass),
 ]);
 $user->save();
@@ -63,16 +61,16 @@ echo "USER_CREATED=" . $user->id . PHP_EOL;
 PHP
 )
 
-echo "==> create root user if absent"
-RESULT=$(ssh root@"$HOST" \
+log_info "create root user if absent"
+result=$(ssh root@"$HOST" \
   "docker exec -e COOLIFY_BOOTSTRAP_NAME='$ESC_NAME' \
      -e COOLIFY_BOOTSTRAP_EMAIL='$ESC_EMAIL' \
      -e COOLIFY_BOOTSTRAP_PASS='$ESC_PASS' \
      coolify php artisan tinker --execute=$(printf '%q' "$TINKER_CODE")" \
   | grep -oE 'USER_(EXISTS|CREATED)=[0-9]+' | head -1)
 
-case "$RESULT" in
-  USER_EXISTS=*)  echo "    user already exists (id=${RESULT#USER_EXISTS=})" ;;
-  USER_CREATED=*) echo "    user created (id=${RESULT#USER_CREATED=})" ;;
-  *)              echo "ERROR: unexpected output: $RESULT"; exit 1 ;;
+case "$result" in
+  USER_EXISTS=*)  log_info "user already exists (id=${result#USER_EXISTS=})" ;;
+  USER_CREATED=*) log_info "user created (id=${result#USER_CREATED=})" ;;
+  *)              die "unexpected output: $result" ;;
 esac

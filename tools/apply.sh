@@ -2,146 +2,141 @@
 # Apply: converge the iedora homelab to the desired state. Idempotent — safe
 # to re-run. Use tools/destroy.sh for tear-down.
 #
-# Sequence (each phase is idempotent):
+# Usage:
+#   tools/apply.sh [-h|--help]
+#
+# Phases (each idempotent):
 #   1. tofu apply iac/stacks/infra      (4 LXCs + CF tunnel + DNS)
 #   2. wait for LXCs to be SSH-reachable
 #   3. bootstrap service LXCs           (install binaries + per-service secrets)
 #   4. install cloudflared connectors on Coolify + runner (HA)
-#   5. bootstrap Coolify                (install + root user + mint API token)
+#   5. bootstrap Coolify                (install + root user + ensure fresh token)
 #   6. tofu apply iac/stacks/platform   (register runner in Coolify)
 #   7. trigger Coolify Docker engine validation on runner
-#   8. sync ops LXC cron jobs           (drift + token rotation)
+#   8. sync ops LXC cron jobs           (assembled from services/*/cron.yaml)
 #
 # Pre-reqs:
-#   - All BWS secrets seeded (see tools/seed-bws.sh)
-#   - iac/.envrc populated with BW_ORGANIZATION_ID and /root/.bws-token present
-#   - Ops LXC has /root/.ssh/id_ed25519 (key already trusted by PVE root)
+#   - All BWS secrets seeded (tools/seed-bws.sh)
+#   - iac/.envrc populated (copy from iac/.envrc.example)
+#   - Ops LXC has /root/.ssh/id_ed25519 trusted by PVE root
 #
 # LXC IPs are NEVER hardcoded here. After Phase 1, tools/lib/lxc-ips.sh
 # reads tofu output and exports IP_ADGUARD / IP_GATEWAY / IP_COOLIFY /
 # IP_RUNNER / ALL_LXC_IPS. Change IPs in network/ips.yaml.
 
-set -e
-
+set -eu
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_ROOT=${SCRIPT_DIR%/tools}
 # shellcheck disable=SC1091
-. "$REPO_ROOT/iac/.envrc"
+. "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/lib/bws.sh"
+
+case "${1:-}" in
+  -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+esac
+
+source_envrc
+require_cmd tofu ssh ssh-keygen scp jq bws curl
 
 INFRA_DIR="$REPO_ROOT/iac/stacks/infra"
 PLATFORM_DIR="$REPO_ROOT/iac/stacks/platform"
 
-step() { printf '\n\033[1;34m[%s]\033[0m %s\n' "$1" "$2"; }
-sub()  { printf '  → %s\n' "$1"; }
-
+# wait_ssh IP [TIMEOUT_SECS]
 wait_ssh() {
-  # args: ip [timeout_seconds]
-  ip=$1; max=${2:-120}; i=0
-  while [ $i -lt "$max" ]; do
+  _ip=$1; _max=${2:-120}; _i=0
+  while [ $_i -lt "$_max" ]; do
     if ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new \
-       root@"$ip" true 2>/dev/null; then
+       root@"$_ip" true 2>/dev/null; then
       return 0
     fi
-    sleep 2; i=$((i + 2))
+    sleep 2; _i=$((_i + 2))
   done
-  echo "ERROR: $ip not SSH-reachable after ${max}s"; return 1
+  die "$_ip not SSH-reachable after ${_max}s"
 }
 
-# Ensure ops-LXC local deps that aren't part of the base image. Idempotent —
-# apt install on already-present packages is a no-op. Go is needed by
-# tools/lib/assemble-crons (cron file generator, phase 8/8).
-ensure_dep() {
-  bin=$1; pkg=$2
-  command -v "$bin" >/dev/null && return 0
-  echo "  installing $pkg (provides $bin)…"
+# ensure_apt_pkg BIN PKG — install PKG via apt if BIN is not on PATH. Idempotent.
+ensure_apt_pkg() {
+  command -v "$1" >/dev/null && return 0
+  log_info "installing $2 (provides $1)…"
   DEBIAN_FRONTEND=noninteractive apt-get update -qq
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$pkg"
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$2"
 }
-ensure_dep go golang-go
+# Go is needed by tools/lib/assemble-crons (phase 8).
+ensure_apt_pkg go golang-go
 
-# ───────────────────────────────────────────────────────────────────────────────
-step "1/6" "tofu apply — stacks/infra"
+# ── 1. Infra ────────────────────────────────────────────────────────────────
+log_step "1/8" "tofu apply — stacks/infra"
 cd "$INFRA_DIR"
 tofu init -input=false -upgrade=false >/dev/null
 tofu apply -input=false -auto-approve
 
 # Load IPs from tofu output now that infra state is populated.
 # shellcheck disable=SC1091
-. "$REPO_ROOT/tools/lib/lxc-ips.sh"
-sub "IPs loaded: $ALL_LXC_IPS"
+. "$SCRIPT_DIR/lib/lxc-ips.sh"
+log_info "IPs loaded: $ALL_LXC_IPS"
 
-# ───────────────────────────────────────────────────────────────────────────────
-step "2/6" "wait for service LXCs to be SSH-reachable"
-# Clean stale known_hosts entries — LXCs may have been recreated with new host keys.
+# ── 2. SSH reachability ─────────────────────────────────────────────────────
+log_step "2/8" "wait for service LXCs to be SSH-reachable"
+# LXCs may have been recreated with new host keys — clear stale entries.
 for ip in $ALL_LXC_IPS; do
   ssh-keygen -R "$ip" >/dev/null 2>&1 || true
 done
 for ip in $ALL_LXC_IPS; do
-  sub "$ip"
+  log_info "$ip"
   wait_ssh "$ip"
 done
 
-# ───────────────────────────────────────────────────────────────────────────────
-step "3/6" "bootstrap service LXCs"
+# ── 3. Per-service bootstraps ───────────────────────────────────────────────
+log_step "3/8" "bootstrap service LXCs"
 
-sub "adguard ($IP_ADGUARD): install AGH binary"
+log_info "adguard ($IP_ADGUARD): install AGH binary"
 ssh root@"$IP_ADGUARD" 'sh -s' < "$REPO_ROOT/services/adguard/bootstrap.sh"
 [ -x "$REPO_ROOT/services/adguard/sync.sh" ] && "$REPO_ROOT/services/adguard/sync.sh"
 
-sub "gateway ($IP_GATEWAY): install Caddy + Authelia + generate OIDC keys"
+log_info "gateway ($IP_GATEWAY): install Caddy + Authelia + generate OIDC keys"
 ssh root@"$IP_GATEWAY" 'sh -s' < "$REPO_ROOT/services/gateway/bootstrap.sh"
 [ -x "$REPO_ROOT/services/gateway/authelia/sync.sh" ] && "$REPO_ROOT/services/gateway/authelia/sync.sh"
 [ -x "$REPO_ROOT/services/gateway/caddy/sync.sh" ]    && "$REPO_ROOT/services/gateway/caddy/sync.sh"
 
-sub "coolify-runner-01 ($IP_RUNNER): install Docker"
+log_info "coolify-runner-01 ($IP_RUNNER): install Docker"
 ssh root@"$IP_RUNNER" 'sh -s' < "$REPO_ROOT/services/coolify-runner-01/bootstrap.sh"
 
-# ───────────────────────────────────────────────────────────────────────────────
-step "4/6" "install cloudflared connectors (Coolify + runner replica for HA)"
+# ── 4. Cloudflared HA pair ──────────────────────────────────────────────────
+log_step "4/8" "install cloudflared connectors (Coolify + runner replica for HA)"
 TUNNEL_TOKEN=$(cd "$INFRA_DIR" && tofu output -raw tunnel_token)
-# Same tunnel, two connectors → 8 outbound connections across 2 LXCs. If
-# either host reboots, the other keeps serving. Cloudflare routes to the
-# geographically closest replica automatically.
+# Same tunnel, two connectors → 8 outbound connections across 2 LXCs.
 for host in "$IP_COOLIFY" "$IP_RUNNER"; do
-  sub "cloudflared on $host"
+  log_info "cloudflared on $host"
   ssh root@"$host" "TUNNEL_TOKEN=$TUNNEL_TOKEN sh -s" \
     < "$REPO_ROOT/services/cloudflared/install.sh"
 done
 
-# ───────────────────────────────────────────────────────────────────────────────
-step "5/8" "bootstrap Coolify (install + create root user + ensure fresh token)"
-# Split for SRP — all three idempotent:
-#   install         → no-op if Coolify is installed + API enabled
-#   bootstrap-user  → no-op if user with IEDORA_ADMIN_EMAIL exists
-#   rotate-token    → no-op if BWS holds a token valid for >7 days
+# ── 5. Coolify (split into 3 idempotent steps for SRP) ──────────────────────
+log_step "5/8" "bootstrap Coolify"
 COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/install.sh"
 COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/bootstrap-user.sh"
 COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/rotate-token.sh"
 
-# ───────────────────────────────────────────────────────────────────────────────
-step "6/8" "tofu apply — stacks/platform (register runner in Coolify)"
+# ── 6. Platform stack ───────────────────────────────────────────────────────
+log_step "6/8" "tofu apply — stacks/platform (register runner in Coolify)"
 cd "$PLATFORM_DIR"
 tofu init -input=false -upgrade=false >/dev/null
 tofu apply -input=false -auto-approve
 
-# ───────────────────────────────────────────────────────────────────────────────
-step "7/8" "trigger Coolify's Docker engine validation on runner"
-# Coolify's API server-create endpoint runs validateConnection (SSH) but NOT
+# ── 7. Coolify-side Docker engine validation ────────────────────────────────
+log_step "7/8" "trigger Coolify's Docker engine validation on runner"
+# Coolify's API server-create runs validateConnection (SSH) but NOT
 # validateDockerEngine. Without this, is_usable stays false until you click
-# "Validate" in the UI. Kick it manually via tinker so the runner is ready
-# for deploys at end-of-apply.
+# "Validate" in the UI.
 ssh root@"$IP_COOLIFY" "docker exec coolify php artisan tinker --execute='
 \$s = App\\Models\\Server::where(\"name\", \"coolify-runner-01\")->first();
 if (\$s) { \$s->validateDockerEngine(); }
 ' 2>&1" | tail -3
 
-# ───────────────────────────────────────────────────────────────────────────────
-step "8/8" "sync ops LXC cron jobs (assembled from services/*/cron.yaml)"
-# Per-service cron declarations live in each services/<svc>/cron.yaml.
-# The assembler emits the full /etc/cron.d/iac content; we install only
-# on diff to avoid spurious cron reloads.
+# ── 8. Cron jobs ────────────────────────────────────────────────────────────
+log_step "8/8" "sync ops LXC cron jobs (assembled from iac/cron.yaml + services/*/cron.yaml)"
 TMP_CRON=$(mktemp)
 trap 'rm -f "$TMP_CRON"' EXIT
 (cd "$REPO_ROOT/tools/lib/assemble-crons" && go run . "$REPO_ROOT") > "$TMP_CRON"
@@ -149,22 +144,20 @@ trap 'rm -f "$TMP_CRON"' EXIT
 install -d -m 0755 /etc/cron.d
 if ! cmp -s "$TMP_CRON" /etc/cron.d/iac 2>/dev/null; then
   install -m 0644 "$TMP_CRON" /etc/cron.d/iac
-  sub "installed /etc/cron.d/iac"
+  log_info "installed /etc/cron.d/iac"
 else
-  sub "/etc/cron.d/iac up-to-date"
+  log_info "/etc/cron.d/iac up-to-date"
 fi
-
 # Pre-create log files with restrictive perms (cron creates them
-# world-readable otherwise). Paths come from the assembled crontab itself.
+# world-readable otherwise).
 grep -oE '>> /var/log/[^ ]+' "$TMP_CRON" | awk '{print $2}' | sort -u | while read -r log; do
   [ -e "$log" ] || { touch "$log"; chmod 640 "$log"; }
 done
 
-# ───────────────────────────────────────────────────────────────────────────────
+# ── Summary ─────────────────────────────────────────────────────────────────
 printf '\n\033[1;32m✓ apply complete — homelab converged to desired state\033[0m\n'
 echo "  Coolify UI:  https://coolify.iedora.com"
 echo "  Authelia UI: https://auth.iedora.com"
 echo "  AdGuard UI:  https://adguard.iedora.com (via gateway with SSO)"
-ADMIN_EMAIL=$(bws secret list --output json | jq -r '.[] | select(.key=="IEDORA_ADMIN_EMAIL") | .value')
-echo "  Admin email: $ADMIN_EMAIL"
-echo "  Admin pass:  bws secret list --output json | jq -r '.[] | select(.key==\"IEDORA_ADMIN_PASSWORD\") | .value'"
+echo "  Admin email: $(bws_get IEDORA_ADMIN_EMAIL)"
+echo "  Admin pass:  bws secret list | jq -r '.[] | select(.key==\"IEDORA_ADMIN_PASSWORD\") | .value'"
