@@ -129,8 +129,10 @@ Two-tier model, organized by lifecycle:
 - **`iac/secrets.sops.yaml`** — single source for all homelab config:
   genuine secrets *and* non-secret identifiers (account IDs, admin
   name/email, ntfy topic), encrypted with **age** via **sops**. Committed
-  to git in encrypted form; exported into the shell on every `tofu`
-  invocation. Edit with `sops iac/secrets.sops.yaml`.
+  to git in encrypted form; decrypted into `$KEY` env vars by
+  `tools/lib/common.sh source_envrc` (auto-loaded via direnv per-stack
+  `.envrc`). Edit with `sops iac/secrets.sops.yaml`. Layout reference:
+  `iac/secrets.template.yaml`.
 - **Coolify UI** — env vars for apps deployed on the platform (DB
   passwords, JWT secrets, AI keys per app). Never duplicated elsewhere.
 
