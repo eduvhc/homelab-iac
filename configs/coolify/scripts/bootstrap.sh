@@ -60,7 +60,10 @@ until ssh root@"$HOST" 'curl -fsS -m 3 http://localhost:8000/api/health 2>/dev/n
 done
 
 echo "==> enabling Coolify API (off by default on fresh install)"
-ssh root@"$HOST" 'docker exec coolify php artisan tinker --execute='"'"'$s = App\Models\InstanceSettings::first(); if ($s) { $s->is_api_enabled = true; $s->save(); }'"'"'' >/dev/null
+# Coolify 4.1.x creates the InstanceSettings row lazily on first read, so
+# `::first()` returns null on a brand-new install and the update silently
+# no-ops. Use firstOrCreate to force-materialize the row, then update.
+ssh root@"$HOST" 'docker exec coolify php artisan tinker --execute='"'"'App\Models\InstanceSettings::firstOrCreate([])->update(["is_api_enabled" => true]);'"'"'' >/dev/null
 
 echo "==> creating root user (if absent) and minting token"
 ESC_NAME=$(printf '%s' "$ADMIN_NAME" | sed "s/'/'\\\\''/g")
