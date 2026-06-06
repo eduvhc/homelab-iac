@@ -1,0 +1,9 @@
+# Wildcard route — catches every <app>.iedora.com that doesn't match a named
+# rule. Coolify's Traefik on the runner LXC owns deployed-app hostnames.
+#
+# Wildcard MUST point to a real IP (not localhost), because cloudflared runs
+# on multiple LXCs for HA — a localhost reference only works on the host
+# where the upstream service lives.
+
+- hostname: "*"
+  upstream: {host: coolify-runner-01, port: 80}

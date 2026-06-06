@@ -22,9 +22,12 @@ resource "cloudflare_zero_trust_tunnel_cloudflared" "coolify" {
 }
 
 # Per-service tunnel routes: discover every services/<svc>/tunnel-routes.yaml
-# and flatten into a single ingress list. Each entry's upstream is rendered
-# via local.ips by service-name (or kept as "localhost" verbatim — used when
-# cloudflared shares the LXC with the upstream service).
+# and split into named + wildcard. The wildcard (hostname: "*") must come
+# LAST in the ingress array, before the 404 fallback.
+#
+# Upstreams resolve service names via network/ips.yaml; "localhost" is
+# accepted but discouraged with cloudflared HA (only works on the host
+# where the upstream actually listens).
 locals {
   _route_files = fileset("${path.module}/../../..", "services/*/tunnel-routes.yaml")
   _routes_raw = flatten([
@@ -32,20 +35,37 @@ locals {
     yamldecode(file("${path.module}/../../../${f}"))
   ])
 
+  _named_routes = { for r in local._routes_raw : r.hostname => r if r.hostname != "*" }
+  _wildcards    = [for r in local._routes_raw : r if r.hostname == "*"]
+
   tunnel_routes = {
-    for r in local._routes_raw :
-    r.hostname => (
+    for h, r in local._named_routes :
+    h => (
       r.upstream.host == "localhost"
       ? "http://localhost:${r.upstream.port}"
       : "http://${local.ips[r.upstream.host]}:${r.upstream.port}"
     )
   }
 
-  # Wildcard: every other subdomain → Coolify's Traefik on the cloudflared host.
-  tunnel_wildcard_service = "http://localhost:80"
+  # Exactly-one wildcard expected. If absent → no catch-all, just 404 fallback.
+  _wildcard_service = length(local._wildcards) == 0 ? null : (
+    local._wildcards[0].upstream.host == "localhost"
+    ? "http://localhost:${local._wildcards[0].upstream.port}"
+    : "http://${local.ips[local._wildcards[0].upstream.host]}:${local._wildcards[0].upstream.port}"
+  )
 
-  # DNS records: every named route + the wildcard.
-  tunnel_hostnames = toset(concat(keys(local.tunnel_routes), ["*"]))
+  # DNS records: every named route + the wildcard (if any).
+  tunnel_hostnames = toset(
+    concat(keys(local.tunnel_routes), local._wildcard_service == null ? [] : ["*"])
+  )
+}
+
+# Two-or-more wildcards = ambiguous routing. Catch at plan time.
+check "single_wildcard" {
+  assert {
+    condition     = length(local._wildcards) <= 1
+    error_message = "More than one services/*/tunnel-routes.yaml declares `hostname: \"*\"`. Only one wildcard is allowed."
+  }
 }
 
 resource "cloudflare_zero_trust_tunnel_cloudflared_config" "coolify" {
@@ -58,15 +78,11 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "coolify" {
         hostname = "${name}.${var.domain}"
         service  = svc
       }],
-      [
-        {
-          hostname = "*.${var.domain}"
-          service  = local.tunnel_wildcard_service
-        },
-        {
-          service = "http_status:404"
-        }
-      ]
+      local._wildcard_service == null ? [] : [{
+        hostname = "*.${var.domain}"
+        service  = local._wildcard_service
+      }],
+      [{ service = "http_status:404" }]
     )
   }
 }
