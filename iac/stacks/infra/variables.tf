@@ -10,6 +10,12 @@ variable "domain" {
   description = "Root domain managed by this config."
 }
 
+variable "proxmox_ssh_key_path" {
+  type        = string
+  default     = "/root/.ssh/id_ed25519"
+  description = "Path to the SSH private key the bpg/proxmox provider uses to SSH into PVE. Override in CI with a dummy path so `tofu validate` doesn't fail on missing /root/.ssh/."
+}
+
 variable "bws_keys" {
   type = object({
     cf_api_token      = string

@@ -29,12 +29,20 @@ jobs:
         working-directory: iac/stacks/${{ matrix.stack }}
         run: tofu init -backend=false -input=false
 
+      - name: prepare dummy SSH key (infra provider needs file() at parse time)
+        if: matrix.stack == 'infra'
+        run: |
+          mkdir -p "$RUNNER_TEMP/ssh"
+          ssh-keygen -t ed25519 -N '' -f "$RUNNER_TEMP/ssh/dummy" -q
+
       - name: validate
         working-directory: iac/stacks/${{ matrix.stack }}
-        # `validate` reads encryption{} blocks which need the passphrase. Set a
-        # dummy value — we're not decrypting state, just checking config syntax.
+        # `validate` reads encryption{} blocks which need the passphrase, and
+        # the proxmox provider calls file() at parse time. Both get dummy
+        # values — we're checking syntax, not actually planning.
         env:
           TF_VAR_tf_state_passphrase: ci-dummy-passphrase-not-a-real-secret
+          TF_VAR_proxmox_ssh_key_path: ${{ runner.temp }}/ssh/dummy
         run: tofu validate
 
   gitleaks:

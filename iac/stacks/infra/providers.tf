@@ -58,6 +58,6 @@ provider "proxmox" {
   ssh {
     agent       = false
     username    = "root"
-    private_key = file("/root/.ssh/id_ed25519")
+    private_key = file(var.proxmox_ssh_key_path)
   }
 }

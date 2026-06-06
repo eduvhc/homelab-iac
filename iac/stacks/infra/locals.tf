@@ -21,8 +21,6 @@ locals {
     coolify_runner_01 = "192.168.50.210"
   }
 
-  gateway_ip = local.ips.gateway
-
   # Service URLs derived from the above.
   coolify_api_url = "http://${local.ips.coolify}:8000"
 
