@@ -9,5 +9,13 @@ crash.log
 override.tf
 override.tf.json
 terraform.tfvars
+# State lives in Cloudflare R2 (s3 backend). Never commit local copies.
+terraform.tfstate
+terraform.tfstate.*
 *.tfstate.backup
 *.tfstate.*.backup
+
+# Upstream source trees fetched on demand by tools/fetch-references.sh.
+# Keep references/README.md tracked.
+references/*/
+!references/README.md

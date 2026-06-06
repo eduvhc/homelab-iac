@@ -1,9 +1,17 @@
-# Read outputs from the infra stack (../infra/terraform.tfstate, encrypted with
-# the same passphrase via providers.tf encryption block).
+# Read outputs from the infra stack (state lives in the same R2 bucket under
+# infra/terraform.tfstate; same encryption passphrase via providers.tf
+# encryption block — see remote_state_data_sources in that file).
 data "terraform_remote_state" "infra" {
-  backend = "local"
+  backend = "s3"
   config = {
-    path = "../infra/terraform.tfstate"
+    bucket                      = "iedora-iac-state"
+    key                         = "infra/terraform.tfstate"
+    region                      = "auto"
+    skip_credentials_validation = true
+    skip_metadata_api_check     = true
+    skip_region_validation      = true
+    skip_requesting_account_id  = true
+    skip_s3_checksum            = true
   }
 }
 

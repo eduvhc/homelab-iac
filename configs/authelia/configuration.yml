@@ -37,6 +37,16 @@ identity_providers:
       use: sig
       key: |
         {{- fileContent "/etc/authelia/oidc-private.pem" | nindent 8 }}
+    # 4.39 narrowed default ID Token claims to the spec minimum; clients that
+    # read profile/email from the ID Token (rather than /userinfo) now see less
+    # than they did on 4.38. Hydrate them explicitly so Coolify keeps working.
+    claims_policies:
+      default:
+        id_token:
+        - email
+        - email_verified
+        - name
+        - preferred_username
     clients:
     - client_id: coolify
       client_name: Coolify
@@ -44,6 +54,7 @@ identity_providers:
       client_secret: $pbkdf2-sha512$310000$1dV1QB3D/YeONDS0mvQPnw$K6ro1bSsztpEUxdwit./VoeqbkD.Ns3rfGeXP8ArPDJoybY4hhY9nomfUZKOOXfV0FMB.JlAqwv3ZWGhFuVGcw
       public: false
       authorization_policy: one_factor
+      claims_policy: default
       require_pkce: true
       pkce_challenge_method: S256
       redirect_uris:

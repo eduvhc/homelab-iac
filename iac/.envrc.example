@@ -1,13 +1,27 @@
-# Copy to .envrc and fill BW_ORGANIZATION_ID. source it before tofu commands.
+# Copy to iac/.envrc on the ops LXC. Both stacks share it: one `source`
+# covers infra + platform. .envrc is gitignored — never commit it.
 
-# OpenTofu provider env vars
+# ─── Bitwarden Secrets Manager ────────────────────────────────────────────────
 export BW_ACCESS_TOKEN="$(cat /root/.bws-token)"
 export BW_ORGANIZATION_ID="REPLACE_WITH_BWS_ORG_ID"
 export BW_API_URL="https://api.bitwarden.com"
 export BW_IDENTITY_API_URL="https://identity.bitwarden.com"
-
-# bws CLI uses a different env var name (BWS_ prefix)
+# bws CLI uses BWS_ prefix
 export BWS_ACCESS_TOKEN="$BW_ACCESS_TOKEN"
 
-# State passphrase fetched via bws CLI - chicken-egg with the encryption block.
-export TF_VAR_tf_state_passphrase="$(bws secret list --output json | jq -r '.[] | select(.key=="TOFU_STATE_PASSPHRASE") | .value')"
+# Cache the full secret list once — saves 4× bws round-trips below.
+_BWS=$(bws secret list --output json)
+_bws_get() { echo "$_BWS" | jq -r --arg k "$1" '.[] | select(.key==$k) | .value'; }
+
+# ─── OpenTofu state encryption (PBKDF2-AES-GCM via encryption{} block) ────────
+export TF_VAR_tf_state_passphrase="$(_bws_get TOFU_STATE_PASSPHRASE)"
+
+# ─── R2 backend for tofu state (native S3 + use_lockfile, no DynamoDB) ────────
+# Seeded by tools/seed-bws.sh. The AWS_* names are what OpenTofu's s3
+# backend reads — they're not actually AWS credentials.
+export AWS_ACCESS_KEY_ID="$(_bws_get R2_ACCESS_KEY_ID)"
+export AWS_SECRET_ACCESS_KEY="$(_bws_get R2_SECRET_ACCESS_KEY)"
+export AWS_REGION=auto
+export AWS_ENDPOINT_URL_S3="https://$(_bws_get R2_ACCOUNT_ID).r2.cloudflarestorage.com"
+
+unset _BWS

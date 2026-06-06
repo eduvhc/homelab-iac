@@ -34,6 +34,10 @@ mkdir -p /etc/authelia /var/lib/authelia /var/log/authelia
 chown -R authelia:authelia /etc/authelia /var/lib/authelia /var/log/authelia
 chmod 750 /etc/authelia
 
+# Caddy log directory (Caddyfile writes JSON access log here with zstd rolling).
+# Created by deb package only for /var/log/caddy/access.log itself — be defensive.
+install -d -o caddy -g caddy -m 0750 /var/log/caddy
+
 if [ ! -s /etc/authelia/secrets.env ]; then
   JWT=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 64)
   SESS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 64)

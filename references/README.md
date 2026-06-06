@@ -1,48 +1,40 @@
 # References
 
-Upstream source trees pinned as git submodules. Use these to read source
-when debugging, understanding schemas, or finding undocumented APIs.
+Upstream source trees fetched **on demand** for grepping and reading. These
+are NOT runtime dependencies — they're just source so any human or agent can
+`cd references/<name>` and grep without hunting through GitHub.
 
-These are NOT runtime dependencies. They are documentation/source references
-so any reader (human or agent) can `cd references/<name>` and grep without
-hunting through GitHub.
+Nothing in `references/<name>/` is tracked by git (see `.gitignore`); only
+this README is committed.
 
-| Submodule | Version pinned | Used by |
+## Fetching
+
+```sh
+tools/fetch-references.sh             # fetch all (shallow clone, ~slow first time)
+tools/fetch-references.sh coolify     # fetch just one
+```
+
+The script is idempotent: it skips any reference whose directory already
+exists. To refresh one, delete the directory and re-run:
+
+```sh
+rm -rf references/coolify
+tools/fetch-references.sh coolify
+```
+
+## Available references
+
+| Name | Branch | Used by |
 |---|---|---|
-| AdGuardHome                          | latest master  | LXC 102 (DNS server) |
-| coolify                              | latest main    | LXC 200 (PaaS) |
-| opentofu                             | latest main    | LXC 101 (IaC tool) |
-| cloudflared                          | latest master  | LXC 200 (tunnel client) |
-| terraform-provider-cloudflare        | latest main    | provider in providers.tf |
-| terraform-provider-bitwarden-secrets | latest main    | provider in providers.tf |
-| bitwarden-sdk-sm                     | latest main    | bws CLI in LXC 101 |
+| AdGuardHome                          | master | LXC 102 (DNS server) |
+| coolify                              | v4.x   | LXC 200 (PaaS) |
+| coolify-docs                         | v4.x   | LXC 200 (docs source) |
+| opentofu                             | main   | LXC 101 (IaC tool) |
+| cloudflared                          | master | LXC 200 (tunnel client) |
+| terraform-provider-cloudflare        | main   | provider in providers.tf |
+| terraform-provider-bitwarden-secrets | main   | provider in providers.tf |
+| bitwarden-sdk-sm                     | main   | bws CLI in LXC 101 |
+| authelia                             | master | LXC 103 |
+| caddy                                | master | LXC 103 |
 
-## Cloning the repo with refs
-
-```bash
-git clone --recurse-submodules git@github.com:eduvhc/iedora-iac.git
-# or after a plain clone:
-git submodule update --init --recursive --depth 1
-```
-
-## Updating a reference to track upstream
-
-```bash
-cd references/<name>
-git fetch --depth 1 origin <branch>
-git checkout origin/<branch>
-cd ../..
-git add references/<name>
-git commit -m "refs: bump <name> to <commit>"
-```
-
-## Pinning to a specific release tag
-
-When we upgrade a service in production, pin the matching tag here too:
-```bash
-cd references/AdGuardHome
-git fetch --depth 1 origin tag v0.107.55
-git checkout v0.107.55
-cd ../..
-git add references/AdGuardHome
-```
+All clones are shallow (`--depth=1`) against the listed branch.

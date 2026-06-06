@@ -86,7 +86,9 @@ else
   echo "Need a Cloudflare API token with these permissions on the iedora.com zone:"
   echo "  - Account / Cloudflare Tunnel: Edit"
   echo "  - Account / Zero Trust: Edit"
-  echo "  - Zone / DNS: Edit"
+  echo "  - Account / Cloudflare R2: Edit         (for the tofu state bucket)"
+  echo "  - User    / API Tokens: Edit            (to mint the scoped R2 token)"
+  echo "  - Zone    / DNS: Edit"
   echo "Create at: https://dash.cloudflare.com/profile/api-tokens"
   prompt_secret CF_TOKEN "  Paste CF API token"
   bws_create CLOUDFLARE_API_TOKEN "$CF_TOKEN" "Cloudflare API token for tunnel + DNS + Zero Trust on iedora.com."
@@ -145,6 +147,90 @@ else
   bws_create NTFY_TOPIC "$V" "ntfy.sh topic for IaC drift alerts. Subscribe in the ntfy app to: https://ntfy.sh/$V"
   echo "[new]  NTFY_TOPIC = $V"
   echo "       → Subscribe in the ntfy mobile app or browser at https://ntfy.sh/$V"
+fi
+
+# ─── R2 backend for tofu state ────────────────────────────────────────────────
+# Stores both stacks' state in a Cloudflare R2 bucket. Native S3 locking
+# (OpenTofu 1.10+ use_lockfile) — no DynamoDB. State stays cifrado pelo
+# encryption{} block (TOFU_STATE_PASSPHRASE) — defense in depth.
+#
+# Requires the existing CLOUDFLARE_API_TOKEN to have these extra scopes:
+#   - Account / Cloudflare R2:Edit
+#   - User / API Tokens:Edit  (to create the scoped R2 token below)
+# If the scopes are missing, the calls return 403 and we print clear guidance.
+
+R2_BUCKET=${R2_BUCKET:-iedora-iac-state}
+R2_LOCATION=${R2_LOCATION:-weur}   # closest to PT — change for other regions
+
+cf_api() {
+  # args: METHOD PATH [json-body]
+  _m=$1; _p=$2; _b=${3:-}
+  if [ -n "$_b" ]; then
+    curl -sS -X "$_m" \
+      -H "Authorization: Bearer $CF_TOKEN" \
+      -H "Content-Type: application/json" \
+      --data "$_b" \
+      "https://api.cloudflare.com/client/v4$_p"
+  else
+    curl -sS -X "$_m" \
+      -H "Authorization: Bearer $CF_TOKEN" \
+      "https://api.cloudflare.com/client/v4$_p"
+  fi
+}
+
+if bws_has R2_ACCESS_KEY_ID && bws_has R2_SECRET_ACCESS_KEY && bws_has R2_ACCOUNT_ID; then
+  echo "[skip] R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_ACCOUNT_ID"
+else
+  echo
+  echo "==> bootstrapping Cloudflare R2 for tofu state…"
+  CF_TOKEN=$(echo "$SECRETS_JSON" | jq -r '.[] | select(.key=="CLOUDFLARE_API_TOKEN") | .value')
+  [ -n "$CF_TOKEN" ] && [ "$CF_TOKEN" != "null" ] || { echo "ERROR: CLOUDFLARE_API_TOKEN missing in BWS — seed it first"; exit 1; }
+
+  # 1. Find account ID via the zones endpoint (reuses the existing token's scope).
+  ACCOUNT_ID=$(cf_api GET '/zones?per_page=1' | jq -r '.result[0].account.id // empty')
+  [ -n "$ACCOUNT_ID" ] || { echo "ERROR: failed to fetch account_id — token may be missing Zone:Read"; exit 1; }
+  echo "    account_id = $ACCOUNT_ID"
+
+  # 2. Create the bucket (idempotent — 409 means it exists, both are fine).
+  BUCKET_RESP=$(cf_api POST "/accounts/$ACCOUNT_ID/r2/buckets" \
+    "{\"name\":\"$R2_BUCKET\",\"locationHint\":\"$R2_LOCATION\",\"storageClass\":\"Standard\"}")
+  if echo "$BUCKET_RESP" | jq -e '.success == true' >/dev/null; then
+    echo "    bucket $R2_BUCKET created in $R2_LOCATION"
+  elif echo "$BUCKET_RESP" | jq -e '[.errors[].code] | contains([10004])' >/dev/null 2>&1; then
+    echo "    bucket $R2_BUCKET already exists — reusing"
+  else
+    echo "ERROR: failed to create bucket: $BUCKET_RESP" >&2
+    echo "       (does CLOUDFLARE_API_TOKEN have 'Account / Cloudflare R2: Edit' scope?)" >&2
+    exit 1
+  fi
+
+  # 3. Create a bucket-scoped R2 API token (Object Read & Write). We use the
+  #    R2 temp-credentials endpoint with a permanent grant; this returns the
+  #    AWS-compatible accessKeyId + secretAccessKey directly (no SHA256 dance).
+  TOKEN_BODY=$(jq -nc --arg b "$R2_BUCKET" '{
+    name: ("iedora-iac-tofu-state-" + (now | tostring | split(".")[0])),
+    policies: [{
+      permission_groups: [
+        {id: "2efd5506f9c8494dacb1fa10a3e7d5b6", name: "Workers R2 Storage Bucket Item Write"}
+      ],
+      resources: { ("com.cloudflare.api.account.r2.bucket." + $b): "*" }
+    }]
+  }')
+  TOKEN_RESP=$(cf_api POST '/user/tokens' "$TOKEN_BODY")
+  KEY_ID=$(echo "$TOKEN_RESP" | jq -r '.result.id // empty')
+  KEY_VAL=$(echo "$TOKEN_RESP" | jq -r '.result.value // empty')
+  if [ -z "$KEY_ID" ] || [ -z "$KEY_VAL" ]; then
+    echo "ERROR: failed to mint R2 API token: $TOKEN_RESP" >&2
+    echo "       (does CLOUDFLARE_API_TOKEN have 'User / API Tokens: Edit' scope?)" >&2
+    exit 1
+  fi
+  # R2 convention: Access Key ID = token ID, Secret = SHA-256 of the token value.
+  SECRET=$(printf '%s' "$KEY_VAL" | sha256sum | cut -d' ' -f1)
+
+  bws_create R2_ACCESS_KEY_ID "$KEY_ID" "R2 access key ID for tofu state backend (bucket-scoped). Minted by seed-bws.sh."
+  bws_create R2_SECRET_ACCESS_KEY "$SECRET" "R2 secret access key (= SHA-256 of the bucket-scoped Cloudflare API token value)."
+  bws_create R2_ACCOUNT_ID "$ACCOUNT_ID" "Cloudflare account ID — used to build the R2 S3 endpoint URL (https://\$ACCOUNT_ID.r2.cloudflarestorage.com)."
+  echo "[new]  R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_ACCOUNT_ID"
 fi
 
 echo

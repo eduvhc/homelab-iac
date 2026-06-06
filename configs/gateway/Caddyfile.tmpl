@@ -5,13 +5,32 @@
     servers {
         trusted_proxies static ${IP_COOLIFY} 127.0.0.1
     }
+    # Default access log for all sites. zstd rolling added in Caddy 2.11
+    # (roll_gzip is deprecated, slated for removal).
+    log default {
+        output file /var/log/caddy/access.log {
+            roll_size 10mb
+            roll_keep 5
+            roll_keep_for 720h
+            roll_compression zstd
+        }
+        format json
+    }
 }
 
-# Shared snippet for Authelia-protected services
+# Shared snippet for Authelia-protected services.
+# Explicitly strip client-supplied identity headers before forward_auth runs.
+# Caddy >=2.11.2 fixes GHSA-7r4p-vjf4-gxv4 (CVE-2026-30851) where copy_headers
+# only emits a conditional `set` on the auth response, leaving client-injected
+# values intact when the auth service omits the header. Belt-and-suspenders.
 (authelia) {
     forward_auth localhost:9091 {
         uri /api/authz/forward-auth
         copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+        header_up -Remote-User
+        header_up -Remote-Groups
+        header_up -Remote-Email
+        header_up -Remote-Name
     }
 }
 

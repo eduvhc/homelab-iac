@@ -29,7 +29,7 @@ configs/<svc>/             Config files for each service LXC
 configs/<svc>/scripts/     bootstrap.sh (one-time setup) + sync.sh (push config + reload)
 tools/                     Operator scripts (seed-bws, rebuild, drift-check)
 docs/                      How-to docs (setup-from-scratch, inventory, 3-node-plan)
-references/                Upstream source as shallow git submodules (for grep + reading)
+references/                Upstream source fetched on demand (for grep + reading)
 ```
 
 The split is by **dependency boundary**: `infra` has no application-layer
@@ -44,7 +44,7 @@ The from-zero flow boils down to:
 
 ```bash
 # On ops LXC, after cloning the repo
-tools/seed-bws.sh      # interactive — populates 7 BWS secrets (idempotent)
+tools/seed-bws.sh      # interactive — populates 10 BWS secrets + creates R2 bucket (idempotent)
 tools/rebuild.sh       # one-shot orchestrator: infra → bootstraps → cloudflared → platform
 ```
 
@@ -78,17 +78,20 @@ Secret names used:
 | Key | Used by | Who creates it |
 |---|---|---|
 | `TOFU_STATE_PASSPHRASE` | `iac/.envrc` (state encryption, both stacks) | operator (one time) |
-| `CLOUDFLARE_API_TOKEN` | infra stack: cloudflare provider | operator (one time) |
-| `PVE_API_TOKEN` | infra stack: bpg/proxmox provider | operator (one time, via `pveum`) |
+| `CLOUDFLARE_API_TOKEN` | infra stack: cloudflare provider + `seed-bws.sh` R2 bootstrap | operator (one time) |
+| `PVE_ROOT_PASSWORD` | infra stack: bpg/proxmox provider | operator (one time) |
 | `IEDORA_ADMIN_NAME` (shared) | `configs/coolify/scripts/bootstrap.sh` | operator (one time) |
 | `IEDORA_ADMIN_EMAIL` (shared) | same | operator (one time) |
 | `IEDORA_ADMIN_PASSWORD` (shared with Authelia) | same | operator (one time) |
 | `COOLIFY_API_TOKEN` | platform stack: terraform_data registrations | `configs/coolify/scripts/bootstrap.sh` (rotates) |
 | `NTFY_TOPIC` | `tools/drift-check.sh` push notifications | `tools/seed-bws.sh` (random) |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_ACCOUNT_ID` | `iac/.envrc` → tofu s3 backend (state in R2) | `tools/seed-bws.sh` (mints scoped CF token) |
 
-Nothing sensitive is committed to git. Both OpenTofu state files
-(`iac/stacks/{infra,platform}/terraform.tfstate`) are committed but
-PBKDF2-AES-GCM encrypted with `TOFU_STATE_PASSPHRASE`.
+Tofu state lives in **Cloudflare R2** (`iedora-iac-state` bucket, native
+S3 locking via `use_lockfile`). The state objects are additionally
+PBKDF2-AES-GCM encrypted by the `encryption{}` block with
+`TOFU_STATE_PASSPHRASE` — defense in depth if the R2 keys leak.
+Nothing sensitive is committed to git.
 
 ## Docs
 
@@ -98,10 +101,10 @@ PBKDF2-AES-GCM encrypted with `TOFU_STATE_PASSPHRASE`.
 
 ## References
 
-Upstream source pinned as shallow submodules under `references/` so any
-human or agent can read source locally:
+Upstream source for the services this repo manages — fetched on demand into
+`references/<name>/` (git-ignored) so any human or agent can grep locally:
 
-| Submodule | Used by |
+| Name | Used by |
 |---|---|
 | `AdGuardHome` | LXC 102 |
 | `coolify` | LXC 200 |
@@ -114,9 +117,10 @@ human or agent can read source locally:
 | `authelia` | LXC 103 |
 | `caddy` | LXC 103 |
 
-Clone with submodules:
+Fetch them with the helper script:
 ```bash
-git clone --recurse-submodules git@github.com:eduvhc/iedora-iac.git
-# or if already cloned:
-git submodule update --init --recursive --depth 1
+tools/fetch-references.sh             # all
+tools/fetch-references.sh coolify     # just one
 ```
+
+See [`references/README.md`](references/README.md) for details.

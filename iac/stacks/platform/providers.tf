@@ -1,6 +1,21 @@
 terraform {
   required_version = ">= 1.12"
 
+  # R2 backend (see iac/stacks/infra/providers.tf for full rationale).
+  # Different `key` keeps the two stacks' state files apart in the bucket.
+  backend "s3" {
+    bucket                      = "iedora-iac-state"
+    key                         = "platform/terraform.tfstate"
+    region                      = "auto"
+    use_lockfile                = true
+    encrypt                     = false
+    skip_credentials_validation = true
+    skip_metadata_api_check     = true
+    skip_region_validation      = true
+    skip_requesting_account_id  = true
+    skip_s3_checksum            = true
+  }
+
   required_providers {
     bitwarden-secrets = {
       source  = "bitwarden/bitwarden-secrets"
