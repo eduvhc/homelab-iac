@@ -10,6 +10,7 @@ authentication_backend:
     disable: true
   file:
     path: /etc/authelia/users_database.yml
+    watch: true
 session:
   cookies:
   - domain: ${HOMELAB_DOMAIN}

@@ -12,7 +12,11 @@
 # save (no `'hashed'` cast). We Hash::make() explicitly, and use
 # Hash::check() to make password updates idempotent — only re-hash if the
 # stored hash doesn't verify the current password. Email is lowercased by
-# Coolify's setEmailAttribute mutator, so we lowercase before query too.
+# Coolify's setEmailAttribute mutator, so we lowercase before storing.
+#
+# Lookup is by id=0 (the root user slot), not by email — otherwise changing
+# HOMELAB_ADMIN_EMAIL in sops would not propagate (firstWhere by new email
+# returns null and the create branch would collide on id=0).
 
 set -euo pipefail
 
@@ -43,12 +47,18 @@ $email = strtolower(getenv('COOLIFY_BOOTSTRAP_EMAIL'));
 $name  = getenv('COOLIFY_BOOTSTRAP_NAME');
 $pass  = getenv('COOLIFY_BOOTSTRAP_PASS');
 
-$existing = User::firstWhere('email', $email);
+$existing = User::find(0);
 if ($existing) {
+    $changed = [];
+    if ($existing->email !== $email) { $existing->email = $email; $changed[] = 'email'; }
+    if ($existing->name  !== $name)  { $existing->name  = $name;  $changed[] = 'name'; }
     if (!Hash::check($pass, $existing->password)) {
         $existing->password = Hash::make($pass);
+        $changed[] = 'password';
+    }
+    if ($changed) {
         $existing->save();
-        echo "USER_PW_UPDATED=" . $existing->id . PHP_EOL;
+        echo "USER_UPDATED=" . $existing->id . ":" . implode(',', $changed) . PHP_EOL;
     } else {
         echo "USER_UNCHANGED=" . $existing->id . PHP_EOL;
     }
@@ -77,11 +87,11 @@ result=$(ssh root@"$HOST" \
      -e COOLIFY_BOOTSTRAP_EMAIL='$ESC_EMAIL' \
      -e COOLIFY_BOOTSTRAP_PASS='$ESC_PASS' \
      coolify php artisan tinker --execute=$(printf '%q' "$TINKER_CODE")" \
-  | grep -oE 'USER_(UNCHANGED|PW_UPDATED|CREATED)=[0-9]+' | head -1)
+  | grep -oE 'USER_(UNCHANGED|UPDATED|CREATED)=[0-9]+(:[a-z,]+)?' | head -1)
 
 case "$result" in
-  USER_UNCHANGED=*)  log_info "user unchanged (id=${result#USER_UNCHANGED=})" ;;
-  USER_PW_UPDATED=*) log_info "user password updated (id=${result#USER_PW_UPDATED=})" ;;
-  USER_CREATED=*)    log_info "user created (id=${result#USER_CREATED=})" ;;
-  *)                 die "unexpected output: $result" ;;
+  USER_UNCHANGED=*) log_info "user unchanged (id=${result#USER_UNCHANGED=})" ;;
+  USER_UPDATED=*)   log_info "user updated (${result#USER_UPDATED=})" ;;
+  USER_CREATED=*)   log_info "user created (id=${result#USER_CREATED=})" ;;
+  *)                die "unexpected output: $result" ;;
 esac
