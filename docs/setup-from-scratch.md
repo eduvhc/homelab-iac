@@ -57,40 +57,84 @@ rotate-token}.sh` (idempotent).
 LXCs 102/103/200/210 are tofu-managed (bpg/proxmox). LXC 101 is manual
 because it's where tofu itself lives.
 
-## Phase −1 — Age key on the operator workstation
+## Phase −1 — Age key on the operator machine
 
-**Do this first** (once, ever, per workstation). It's the only secret
-that doesn't live in encrypted form anywhere; if you lose it, the
-encrypted `iac/secrets.sops.yaml` is unrecoverable.
+**Per-machine pattern**: each machine gets its own age key (not one key per
+person). Eduardo with Mac + Windows + ops LXC = 3 separate keys. Losing
+the laptop = revoke one recipient, no rotation across the others.
+
+**Do this on every new machine** (once per machine):
 
 ```bash
-# Generate the key pair
+# Generate the key pair (private key never leaves this machine)
 mkdir -p ~/.config/sops/age && chmod 700 ~/.config/sops/age
 age-keygen -o ~/.config/sops/age/keys.txt
 chmod 600 ~/.config/sops/age/keys.txt
 
-# Record the public key for .sops.yaml (format: age1...)
+# Record the PUBLIC key — this is what goes into .sops.yaml
 grep -oE 'age1[a-z0-9]+' ~/.config/sops/age/keys.txt
 ```
 
-**Back up the private key immediately**: paste the contents of
-`~/.config/sops/age/keys.txt` into your personal password manager
-(Bitwarden vault, 1Password, etc.) as a Secure Note. Don't skip this —
-key loss is the only catastrophic failure mode of the sops model.
+**For HUMAN-operated machines** (Mac, Windows, WSL): immediately back up
+the private key in the operator's personal password manager (Bitwarden
+Secure Note, 1Password) — see `keys.txt` content, paste verbatim. Key
+loss = locked out of all encrypted secrets.
 
-Then update the repo's [`.sops.yaml`](../.sops.yaml) so future
-`sops` invocations encrypt for your key. For a new homelab clone:
+**For BOT machines** (ops LXC, CI runners): no backup needed — the key
+is regenerable. If lost, generate a new one on that machine and re-onboard
+via the steps below.
 
-```yaml
-creation_rules:
-  - path_regex: secrets\.sops\.yaml$
-    age: age1<your-public-key-here>
-    encrypted_regex: '^[A-Z][A-Z0-9_]+$'
+### Onboarding a new machine (existing operator with a working key required)
+
+```bash
+# 1. New machine: generate key (above) + send the PUBLIC key to an
+#    existing operator.
+
+# 2. Existing operator (with a working key): edit BOTH .sops.yaml files.
+#    Append the new recipient under `keys:` with an anchor, then add the
+#    anchor reference under each creation rule's `key_groups[0].age`.
+#
+#    Example: adding eduardo_windows to iedora-iac/.sops.yaml:
+#      keys:
+#        - &eduardo_mac      age1867...
+#        - &eduardo_ops      age1gr7u...
+#        - &eduardo_windows  age1<NEW>          ← add this line
+#      creation_rules:
+#        - path_regex: secrets\.sops\.yaml$
+#          key_groups:
+#            - age:
+#                - *eduardo_mac
+#                - *eduardo_ops
+#                - *eduardo_windows             ← add this line
+
+# 3. Re-wrap the DEK for the new recipient (run in iedora-iac and iedora):
+cd ~/projects/personal/iedora-iac
+sops updatekeys -y iac/secrets.sops.yaml
+
+cd ~/projects/personal/iedora
+bun prod:env:updatekeys
+
+# 4. Commit + push BOTH repos.
+
+# 5. New machine: git pull → sops -d <file> works immediately.
 ```
 
-For an existing homelab adding a second operator: add the new key as a
-second recipient (comma-separated `age:` list), then re-encrypt with
-`sops updatekeys iac/secrets.sops.yaml`. Both keys can then decrypt.
+### Revoking a machine (lost, stolen, departed operator)
+
+```bash
+# 1. Edit BOTH .sops.yaml: remove the recipient's `keys:` line and the
+#    matching `key_groups[0].age` reference.
+
+# 2. updatekeys re-wraps the DEK without the revoked key + rotates DEK:
+sops updatekeys -y iac/secrets.sops.yaml
+(cd ~/projects/personal/iedora && bun prod:env:updatekeys)
+
+# 3. Commit + push BOTH repos.
+
+# 4. CRITICAL: rotate the underlying secrets too — CF token, PVE password,
+#    Coolify token, R2 creds. updatekeys protects the file FORWARD but the
+#    revoked operator may have already decrypted-and-copied old values.
+```
 
 ## Phase 0 — Bootstrap the ops LXC
 
