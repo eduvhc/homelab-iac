@@ -9,7 +9,7 @@ Documento vivo. Atualizar à medida que os specs reais das 2 novas máquinas for
 | PVE 9.2.3 | Beelink N100, 16 GB, SSD M.2 512 GB | OK, hardened |
 | Coolify LXC 200 | local-lvm, 4c/6G/60G | tunnel CF ativo |
 | Ops LXC 101 | local-lvm, 2c/512M/10G | tofu + sops + git |
-| Backups | HDD USB 2 TB SMR, vzdump diário | SMR é o teto; OK para dev/lab |
+| Backups | HDD USB 2 TB SMR, vzdump diário | SMR é o teto. OK para dev/lab |
 | Tunnel CF | 1 réplica no LXC 200 | 4 conns ao edge |
 
 ## Pressupostos das 2 novas máquinas
@@ -29,11 +29,11 @@ Spec mínimo desejável (ajusta após compra):
 
 **Recomendação: cluster de 3 nodes.**
 
-- ✅ Quórum natural (precisas 2/3 nodes up; aguenta perda de 1)
+- ✅ Quórum natural (precisas 2/3 nodes up, aguenta perda de 1)
 - ✅ Live migration entre nodes (mover Coolify sem downtime)
 - ✅ Datacenter view única
 - ✅ HA opcional, ativável por VM/CT
-- ❌ Pega: corosync exige rede estável; latência <2 ms entre nodes; **adicionar/remover nodes mais tarde é frágil** (especialmente remover)
+- ❌ Pega: corosync exige rede estável, latência <2 ms entre nodes. **Adicionar/remover nodes mais tarde é frágil** (especialmente remover)
 
 Alternativa "3 standalone": só vale se quiseres isolamento absoluto. Perdes live migration e tens de coordenar manualmente.
 
@@ -44,7 +44,7 @@ Quatro opções, em ordem de complexidade:
 | Opção | Prós | Contras | Veredito |
 |---|---|---|---|
 | **Local-only (LVM/ZFS por node) + PBS para backup** | Simples, performante, sem rede a depender | Sem live migration de discos. Para migrar VM = stop + replicate + start | **Recomendado para começar** |
-| **ZFS + pve-zsync** (replicação async) | Adiciona DR. Migration "quente" para nodes com cópia | Cada réplica = +1 GB por GB; janela de RPO | **Opção 2** quando quiseres HA |
+| **ZFS + pve-zsync** (replicação async) | Adiciona DR. Migration "quente" para nodes com cópia | Cada réplica custa +1 GB por GB. Janela de RPO | **Opção 2** quando quiseres HA |
 | **NFS shared de 1 node** | Live migration "barata" | SPOF: o NFS-host morre = todos param | Evita |
 | **Ceph (3-node mínimo)** | Replicação real, scale-out | Quer **10 GbE dedicada**, ~30% overhead RAM/CPU, complexidade operacional alta | **Não** sem 10 GbE |
 
@@ -61,7 +61,7 @@ PBS num **4º** dispositivo seria mais correcto (sobrevive à perda do host onde
 
 **Novidades PBS 4.2 (Abr 2026) que mudam o desenho:**
 
-- **Native S3 object storage backend**: o datastore pode ser um bucket S3-compat (MinIO local, Wasabi, Backblaze B2). Reduz a dependência do disco local do node onde PBS corre — se esse node morrer, o backup sobrevive no S3.
+- **Native S3 object storage backend**: o datastore pode ser um bucket S3-compat (MinIO local, Wasabi, Backblaze B2). Reduz a dependência do disco local do node onde PBS corre. Se esse node morrer, o backup sobrevive no S3.
 - **Server-side encryption em push sync jobs**: ao replicar para um segundo PBS (ou para o HDD USB como datastore secundário), os snapshots são encriptados antes do envio. Útil para o teu "off-site improvisado" sem confiar no destino.
 - **Improved multi-datastore sync**: configurar PBS-no-LXC + cópia para HDD USB como segundo datastore com sync agendado fica nativo, sem rsync à parte.
 
@@ -81,24 +81,24 @@ O Beelink fica útil mas não-crítico. Quando morrer, basta tirá-lo do cluster
 
 ## Plano de execução
 
-### Fase 0 — Antes das máquinas chegarem (faz agora)
+### Fase 0: Antes das máquinas chegarem (faz agora)
 
 - [ ] Hostnames decididos: **pve01** (nova), **pve02** (nova), **pve03** (Beelink)
 - [ ] IPs estáticos reservados no router: **pve01=192.168.50.51**, **pve02=192.168.50.52**, **pve03=192.168.50.53** (Beelink mantém-se)
 - [ ] Definir VLANs (mesmo só uma, marca como tagged em vmbr0 para futuro)
 - [ ] Confirmar que router tem DHCP fora do range planeado
 - [ ] Backup verificado da config actual do Beelink: `/etc/pve` + `vzdump` de 200 e 101
-- [ ] Anotar o tunnel ID actual (`tofu output tunnel_id`) - vai sobreviver à migração
+- [ ] Anotar o tunnel ID actual (`tofu output tunnel_id`). Vai sobreviver à migração
 
-### Fase 1 — Day 0: chegada das máquinas
+### Fase 1: Day 0: chegada das máquinas
 
 - [ ] Instalar PVE 9.x em ambas (mesma versão que o Beelink)
 - [ ] Hardening idêntico ao que fizemos: `pve-no-subscription`, `apt full-upgrade`, SSH key-only, root@pam key-only, `eduvhc@pve` + TFA, locale, kernel cleanup
 - [ ] Adicionar a SSH key do Mac e da ops-lxc a `/etc/pve/priv/authorized_keys` em cada
-- [ ] Configurar NTP (chrony) - **clock skew entre nodes mata corosync**
+- [ ] Configurar NTP (chrony). **Clock skew entre nodes mata corosync**
 - [ ] Network: bridge `vmbr0` igual, IP fixo, `nofail` em fstabs USB se houver
 
-### Fase 2 — Day 1: cluster
+### Fase 2: Day 1: cluster
 
 Esta é a fase frágil. **Não há rollback fácil. Fazer com tempo.**
 
@@ -112,15 +112,15 @@ pvecm add <IP_do_primeiro> --link0 <ip_local>
 
 - [ ] Verificar quorum: `pvecm status` mostra `Total votes: 3`
 - [ ] Verificar pmxcfs sincronizado: `/etc/pve/.members` em todos os nodes mostra os 3
-- [ ] Decidir se quero **dedicated corosync link**: cabo ethernet direto (`vmbr1`) entre os 3 numa rede /24 isolada, para não competir com tráfego LAN. Recomendado se tiveres NICs spare; ignora se for só 1 NIC por node.
+- [ ] Decidir se quero **dedicated corosync link**: cabo ethernet direto (`vmbr1`) entre os 3 numa rede /24 isolada, para não competir com tráfego LAN. Recomendado se tiveres NICs spare. Ignora se for só 1 NIC por node.
 
-⚠️ Adicionar o Beelink AO cluster é opcional. Se o adicionares, tens de o **wipe-reinstall** ou usar `pvecm add` com `--use_ssh` — a primeira é mais fiável. Antes disso: vzdump dos 200/101, restore depois noutro node.
+⚠️ Adicionar o Beelink AO cluster é opcional. Se o adicionares, tens de o **wipe-reinstall** ou usar `pvecm add` com `--use_ssh`. A primeira é mais fiável. Antes disso: vzdump dos 200/101, restore depois noutro node.
 
-### Fase 3 — Day 2: storage
+### Fase 3: Day 2: storage
 
 - [ ] Em cada node novo, criar pool ZFS no 2º disco: `zpool create -o ashift=12 tank /dev/nvme1n1`
 - [ ] Em PVE: Datacenter → Storage → Add ZFS → pool `tank`, content `images, rootdir`
-- [ ] Optional: enable replication entre nodes (Datacenter → Replication) - async, RPO 15 min default
+- [ ] Optional: enable replication entre nodes (Datacenter → Replication). Async, RPO 15 min default
 - [ ] Setup PBS:
   - Cria LXC `pbs` em `pve01`, Debian 13, 2c/4G/100G (ou maior)
   - Datastore num dataset ZFS dedicado: `zfs create tank/pbs-store`
@@ -128,7 +128,7 @@ pvecm add <IP_do_primeiro> --link0 <ip_local>
   - Adiciona como storage `pbs-main` no datacenter PVE
   - Migra job `daily-all` do vzdump-para-HDD para PBS
 
-### Fase 4 — Day 3: migrar Coolify + ops
+### Fase 4: Day 3: migrar Coolify + ops
 
 Opções:
 
@@ -149,7 +149,7 @@ pct restore 200 pbs-main:backup/vzdump-lxc-200-...
 
 Recomendação: **4b primeiro** (testa o pipeline PBS), depois 4a para o dia-a-dia.
 
-### Fase 5 — Day 4: tunnel + Coolify retoma
+### Fase 5: Day 4: tunnel + Coolify retoma
 
 Após o LXC 200 estar no novo node:
 - Verifica que `cloudflared` arrancou (`systemctl status`)
@@ -169,8 +169,8 @@ O repo OpenTofu vai precisar de pouco:
 
 1. **Variáveis em `variables.tf`**: adicionar `cloudflared_replicas = 1` (futuro multi-node)
 2. **Outputs**: já temos `tunnel_token` - reutilizável
-3. **Novo módulo** (opcional, futuro): `modules/pve-host/` que descreve um node PVE como recurso (mas o provider Proxmox é frágil; talvez não valha)
-4. **Repo paralelo** sugestão: `homelab-pve` com a config dos nodes (LXCs, VMs, storages) via provider `bpg/proxmox` - **só** quando o cluster estiver estável; tentar antes é dor.
+3. **Novo módulo** (opcional, futuro): `modules/pve-host/` que descreve um node PVE como recurso (mas o provider Proxmox é frágil. Talvez não valha)
+4. **Repo paralelo** sugestão: `homelab-pve` com a config dos nodes (LXCs, VMs, storages) via provider `bpg/proxmox`. **Só** quando o cluster estiver estável. Tentar antes é dor.
 
 ## Riscos e mitigações
 
