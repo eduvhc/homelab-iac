@@ -48,10 +48,9 @@ tools/seed-bws.sh      # interactive — populates 7 BWS secrets (idempotent)
 tools/rebuild.sh       # one-shot orchestrator: infra → bootstraps → cloudflared → platform
 ```
 
-After the first rebuild, install daily drift detection (cron + ntfy.sh push):
-```bash
-tools/install-drift-cron.sh
-```
+Cron jobs (daily drift detection + 25-day Coolify token rotation) are
+installed automatically by `rebuild.sh` from `configs/ops-cron/iac.cron`
+— a single declarative source. Re-running `rebuild.sh` reconciles them.
 
 **To make changes**:
 

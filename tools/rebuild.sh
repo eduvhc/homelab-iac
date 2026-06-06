@@ -106,13 +106,13 @@ step "5/6" "bootstrap Coolify (install + create root user + mint API token)"
 COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/configs/coolify/scripts/bootstrap.sh"
 
 # ───────────────────────────────────────────────────────────────────────────────
-step "6/7" "tofu apply — stacks/platform (register runner in Coolify)"
+step "6/8" "tofu apply — stacks/platform (register runner in Coolify)"
 cd "$PLATFORM_DIR"
 tofu init -input=false -upgrade=false >/dev/null
 tofu apply -input=false -auto-approve
 
 # ───────────────────────────────────────────────────────────────────────────────
-step "7/7" "trigger Coolify's Docker engine validation on runner"
+step "7/8" "trigger Coolify's Docker engine validation on runner"
 # Coolify's API server-create endpoint runs validateConnection (SSH) but NOT
 # validateDockerEngine. Without this, is_usable stays false until you click
 # "Validate" in the UI. Kick it manually via tinker so the runner is ready
@@ -121,6 +121,23 @@ ssh root@"$IP_COOLIFY" "docker exec coolify php artisan tinker --execute='
 \$s = App\\Models\\Server::where(\"name\", \"coolify-runner-01\")->first();
 if (\$s) { \$s->validateDockerEngine(); }
 ' 2>&1" | tail -3
+
+# ───────────────────────────────────────────────────────────────────────────────
+step "8/8" "sync ops LXC cron jobs (drift detection + token rotation)"
+# Single declarative source: configs/ops-cron/iac.cron. Copy-if-different so
+# we don't trigger cron's "file changed" reload when nothing actually changed.
+install -d -m 0755 /etc/cron.d
+if ! cmp -s "$REPO_ROOT/configs/ops-cron/iac.cron" /etc/cron.d/iac 2>/dev/null; then
+  install -m 0644 "$REPO_ROOT/configs/ops-cron/iac.cron" /etc/cron.d/iac
+  sub "installed /etc/cron.d/iac"
+else
+  sub "/etc/cron.d/iac up-to-date"
+fi
+# Ensure log targets exist with restrictive perms (cron creates them otherwise
+# as world-readable).
+for log in /var/log/iac-drift.log /var/log/coolify-token-rotation.log; do
+  [ -e "$log" ] || { touch "$log"; chmod 640 "$log"; }
+done
 
 # ───────────────────────────────────────────────────────────────────────────────
 printf '\n\033[1;32m✓ rebuild complete\033[0m\n'
