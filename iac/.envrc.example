@@ -19,12 +19,18 @@ export NTFY_TOPIC="REPLACE_WITH_NTFY_TOPIC"
 # Each line becomes an env var; consumers read $TOFU_STATE_PASSPHRASE,
 # $CLOUDFLARE_API_TOKEN, etc. directly. Requires sops + age installed and
 # the age private key at ~/.config/sops/age/keys.txt.
-# Path resolves relative to this file (BASH_SOURCE), so it works from any cwd.
-_envrc_dir="${BASH_SOURCE[0]%/*}"
+#
+# Path: prefer $REPO_ROOT (set by tools/lib/common.sh before sourcing this);
+# fall back to $PWD when sourced manually from iac/. Pure POSIX — works
+# under dash (Debian /bin/sh), so scripts using #!/bin/sh can also source.
+_envrc_secrets="${REPO_ROOT:-$PWD/..}/iac/secrets.sops.yaml"
+_envrc_tmp=$(mktemp)
+sops -d --output-type dotenv "$_envrc_secrets" > "$_envrc_tmp"
 while IFS='=' read -r _k _v; do
   [ -n "$_k" ] && [ "${_k#\#}" = "$_k" ] && export "$_k=$_v"
-done < <(sops -d --output-type dotenv "$_envrc_dir/secrets.sops.yaml")
-unset _k _v _envrc_dir
+done < "$_envrc_tmp"
+rm -f "$_envrc_tmp"
+unset _k _v _envrc_secrets _envrc_tmp
 
 # ─── OpenTofu variable bindings (one TF_VAR_x per declared var) ────────────
 # These map decrypted env vars → tofu's `variable "x" {}` blocks.
