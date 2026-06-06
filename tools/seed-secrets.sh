@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Seed every secret needed by homelab-iac into iac/secrets.sops.yaml.
 # Idempotent — re-running only fills missing entries; existing ones are
 # reported as [skip] and never overwritten.
