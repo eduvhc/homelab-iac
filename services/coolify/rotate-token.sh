@@ -40,13 +40,17 @@ else
   else
     # Stored value is "id|plainTextToken" — look up by id.
     TOKEN_ID=${CURRENT%%|*}
-    DAYS_LEFT=$(ssh root@"$HOST" \
+    # The tinker pipeline can return empty when Coolify is still booting,
+    # when artisan prints non-matching warnings, or when grep finds nothing
+    # — `|| true` keeps `set -e + pipefail` from killing the whole apply.
+    # The case below treats empty as "couldn't determine → rotate defensively".
+    DAYS_LEFT=$({ ssh root@"$HOST" \
       "docker exec coolify php artisan tinker --execute='\
 \$t = App\\\\Models\\\\PersonalAccessToken::find($TOKEN_ID); \
 if (!\$t) { echo \"MISSING\"; return; } \
 if (!\$t->expires_at) { echo \"NEVER\"; return; } \
 echo (int) floor(now()->diffInDays(\$t->expires_at, false));'" 2>/dev/null \
-      | grep -E '^(-?[0-9]+|MISSING|NEVER)$' | tail -1 | tr -d '\r')
+      | grep -E '^(-?[0-9]+|MISSING|NEVER)$' | tail -1 | tr -d '\r'; } || true)
 
     case "$DAYS_LEFT" in
       MISSING) REASON="stored token id=$TOKEN_ID doesn't exist in Coolify DB (stale)" ;;
