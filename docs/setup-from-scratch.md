@@ -37,7 +37,7 @@ rotate-token}.sh` (idempotent).
   for the canonical bootstrap. Lose this key = lose access to all
   encrypted secrets in `iac/secrets.sops.yaml`.
 - A Cloudflare account with the `iedora.com` zone, and an API token with
-  these scopes (you'll be prompted to paste it during `seed-secrets.sh`):
+  these scopes (paste into `iac/secrets.sops.yaml` during Phase 1):
   - `Account / Cloudflare Tunnel: Edit`
   - `Account / Zero Trust: Edit`
   - `Account / Cloudflare R2: Edit`        ← state backend bucket
@@ -194,21 +194,33 @@ ssh root@<ops-ip> 'chmod 600 ~/.config/sops/age/keys.txt'
 
 ## Phase 1 — Seed encrypted secrets
 
+Two-step flow. The operator owns the REQUIRED keys; the script only
+bootstraps the file from `iac/secrets.template.yaml`, validates presence,
+and mints the auto-managed R2 backend creds.
+
 ```bash
+# 1. Write an encrypted skeleton (one-time, if iac/secrets.sops.yaml is absent).
 /root/homelab-iac/tools/seed-secrets.sh
 ```
 
-The script is idempotent and:
-- creates `iac/secrets.sops.yaml` (if missing) — encrypted with the age key
-  registered in `.sops.yaml`
-- auto-generates `TOFU_STATE_PASSPHRASE`, `HOMELAB_ADMIN_PASSWORD`
-- prompts for `CLOUDFLARE_API_TOKEN`, `PVE_ROOT_PASSWORD`
-- prompts for identifiers: `R2_ACCOUNT_ID`, `HOMELAB_ADMIN_NAME`, `HOMELAB_ADMIN_EMAIL`
-- creates the `homelab-iac-state` R2 bucket + a bucket-scoped R2 API token →
-  saves `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` into the encrypted file
-- generates a random `NTFY_TOPIC` (not a secret, but kept in sops as the
-  single source of homelab config)
-- skips any key that already exists
+```bash
+# 2. Fill the REQUIRED keys (see template comments for what to generate).
+sops /root/homelab-iac/iac/secrets.sops.yaml
+```
+
+Required keys (operator-provided): `TOFU_STATE_PASSPHRASE`,
+`CLOUDFLARE_API_TOKEN`, `PVE_ROOT_PASSWORD`, `HOMELAB_ADMIN_PASSWORD`,
+`R2_ACCOUNT_ID`, `HOMELAB_ADMIN_NAME`, `HOMELAB_ADMIN_EMAIL`, `NTFY_TOPIC`.
+
+```bash
+# 3. Re-run — validates above + mints R2 backend creds.
+/root/homelab-iac/tools/seed-secrets.sh
+```
+
+The script writes `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` into the
+encrypted file (CF API mint: access_key = token.id, secret = sha256(token.value)).
+It also creates the `homelab-iac-state` R2 bucket if absent. Both ops are
+idempotent.
 
 After this, **commit + push** `iac/secrets.sops.yaml` — the encrypted file
 is the source of truth, shared across operator machines via git.
@@ -314,10 +326,10 @@ is operator-driven (it commits via git, which needs a human-supervised push).
 
 **Lost the age private key**: catastrophic — without it the encrypted
 secrets file is unreadable. Restore from the backup in your personal
-password manager. As a last resort: re-run `tools/seed-secrets.sh` with a
-fresh age key to regenerate `TOFU_STATE_PASSPHRASE` etc., then re-encrypt
-all tofu state (`tofu init -migrate-state` after editing the encryption
-block to use the old → new passphrase mapping).
+password manager. As a last resort: create a new age key, generate a fresh
+sops file via `tools/seed-secrets.sh` + `sops` (template flow), then
+re-encrypt all tofu state (`tofu init -migrate-state` after editing the
+encryption block to use the old → new passphrase mapping).
 
 **Corrupted R2 state**: `aws s3 cp s3://homelab-iac-state/infra/terraform.tfstate /backup/`
 should be a daily cron (TODO — not yet implemented, candidate for

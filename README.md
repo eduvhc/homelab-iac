@@ -63,7 +63,7 @@ iac/
 tools/                      Operator scripts:
                             • apply.sh         — converge to desired state
                             • destroy.sh       — tear down everything
-                            • seed-secrets.sh  — populate iac/secrets.sops.yaml + R2 bucket
+                            • seed-secrets.sh  — validate sops file + mint R2 backend (skeleton from iac/secrets.template.yaml)
                             • drift-check.sh + lib/{common,sops,cloudflare,sync,lxc-ips}.sh + …
 docs/                       How-to docs
 references/                 Upstream source fetched on demand
@@ -85,7 +85,9 @@ age-keygen -o ~/.config/sops/age/keys.txt && chmod 600 ~/.config/sops/age/keys.t
 # → register the public key in .sops.yaml
 
 # Phase 0-2 (on the ops LXC, after cloning the repo + scp'ing the age key):
-tools/seed-secrets.sh  # interactive — populates iac/secrets.sops.yaml + R2 bucket
+tools/seed-secrets.sh                  # 1st run: writes encrypted skeleton from iac/secrets.template.yaml
+sops iac/secrets.sops.yaml             # fill the REQUIRED keys (see template comments)
+tools/seed-secrets.sh                  # 2nd run: validates + mints R2 backend creds
 git add iac/secrets.sops.yaml && git commit && git push
 tools/apply.sh         # idempotent: infra → bootstraps → cloudflared → platform → crons
 ```
@@ -143,20 +145,29 @@ machine (Mac + ops LXC).
 > including `TOFU_STATE_PASSPHRASE`, which means tofu state in R2 also
 > becomes unreadable.
 
-Entries in `iac/secrets.sops.yaml`, grouped by lifecycle:
+Entries in `iac/secrets.sops.yaml`, split by who owns them:
 
-| Key | Kind | Group | Used by | Who creates it |
-|---|---|---|---|---|
-| `TOFU_STATE_PASSPHRASE` | secret | bootstrap | tofu state encryption block | `tools/seed-secrets.sh` (random; one-time forever) |
-| `HOMELAB_ADMIN_PASSWORD` | secret | bootstrap | `services/coolify/bootstrap-user.sh` | `tools/seed-secrets.sh` (random; change in UI after first login) |
-| `CLOUDFLARE_API_TOKEN` | secret | reactive | infra stack (cloudflare provider) + `seed-secrets.sh` R2 bootstrap | operator pastes once; revokes + replaces freely |
-| `PVE_ROOT_PASSWORD` | secret | reactive | infra stack (bpg/proxmox provider) | operator (set at PVE install) |
-| `COOLIFY_API_TOKEN` | secret | reactive | platform stack: terraform_data registrations | `services/coolify/rotate-token.sh` (operator-driven, ≥25d cadence) |
-| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | secret | reactive | tofu s3 backend | `tools/seed-secrets.sh` (mints scoped CF token) |
-| `R2_ACCOUNT_ID` | identifier | config | tofu s3 backend (R2 endpoint URL) | operator (prompted by `seed-secrets.sh`) |
-| `HOMELAB_ADMIN_NAME` | identifier | config | Coolify + Authelia admin user | operator (prompted by `seed-secrets.sh`) |
-| `HOMELAB_ADMIN_EMAIL` | identifier | config | Coolify + Authelia admin user | operator (prompted by `seed-secrets.sh`) |
-| `NTFY_TOPIC` | identifier | config | drift-check alerts (threat model: spam only) | `tools/seed-secrets.sh` (random suggestion) |
+**Operator-provided** — fill via `sops iac/secrets.sops.yaml`. Template
+in `iac/secrets.template.yaml` shows the expected layout + how to
+generate each value. `tools/seed-secrets.sh` validates these are present;
+it never overwrites them.
+
+| Key | Used by | How to generate |
+|---|---|---|
+| `TOFU_STATE_PASSPHRASE` | tofu state encryption block | `openssl rand -base64 24` (one-time forever) |
+| `CLOUDFLARE_API_TOKEN` | infra stack + R2 bootstrap | dash → API Tokens (scopes in template) |
+| `PVE_ROOT_PASSWORD` | infra stack (bpg/proxmox provider) | set at PVE install |
+| `HOMELAB_ADMIN_PASSWORD` | `services/coolify/bootstrap-user.sh` | `openssl rand -base64 24`; change in UI after first login |
+| `R2_ACCOUNT_ID` | tofu s3 backend (R2 endpoint URL) | dash → Workers right-hand panel |
+| `HOMELAB_ADMIN_NAME` / `EMAIL` | Coolify + Authelia admin user | your identity |
+| `NTFY_TOPIC` | drift-check alerts (threat model: spam only) | unguessable slug, e.g. `homelab-drift-$(openssl rand -hex 8)` |
+
+**Auto-managed** — don't hand-edit; scripts/tofu overwrite.
+
+| Key | Used by | Who writes it |
+|---|---|---|
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | tofu s3 backend | `tools/seed-secrets.sh` (mints scoped CF token; access_key = token.id, secret = sha256(token.value)) |
+| `COOLIFY_API_TOKEN` | platform stack: terraform_data registrations | `services/coolify/rotate-token.sh` (every apply, ≥25d cadence) |
 
 Tofu state lives in **Cloudflare R2** (`homelab-iac-state` bucket, native
 S3 locking via `use_lockfile`). The state objects are additionally
