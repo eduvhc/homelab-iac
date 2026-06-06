@@ -21,45 +21,44 @@ resource "cloudflare_zero_trust_tunnel_cloudflared" "coolify" {
   tunnel_secret = random_id.coolify_tunnel_secret.b64_std
 }
 
+# Single source of truth: subdomain -> upstream behind the tunnel.
+# DNS records and ingress rules are both derived from this map, so adding a
+# new subdomain is a one-line edit.
+locals {
+  tunnel_routes = {
+    coolify = "http://localhost:8000"          # Coolify UI (Coolify LXC :8000)
+    auth    = "http://${local.ips.gateway}:80" # Authelia UI
+    adguard = "http://${local.ips.gateway}:80" # AdGuard admin UI (SSO via Caddy)
+  }
+
+  # Wildcard handles every other hostname (apps deployed by Coolify's Traefik).
+  tunnel_wildcard_service = "http://localhost:80"
+
+  # DNS records: every named route + the wildcard.
+  tunnel_hostnames = toset(concat(keys(local.tunnel_routes), ["*"]))
+}
+
 resource "cloudflare_zero_trust_tunnel_cloudflared_config" "coolify" {
   account_id = local.cf_account_id
   tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.coolify.id
 
   config = {
-    ingress = [
-      {
-        hostname = "coolify.${var.domain}"
-        service  = "http://localhost:8000"
-      },
-      {
-        hostname = "auth.${var.domain}"
-        service  = "http://${local.ips.gateway}:80"
-      },
-      {
-        hostname = "adguard.${var.domain}"
-        service  = "http://${local.ips.gateway}:80"
-      },
-      {
-        hostname = "*.${var.domain}"
-        service  = "http://localhost:80"
-      },
-      {
-        service = "http_status:404"
-      }
-    ]
+    ingress = concat(
+      [for name, svc in local.tunnel_routes : {
+        hostname = "${name}.${var.domain}"
+        service  = svc
+      }],
+      [
+        {
+          hostname = "*.${var.domain}"
+          service  = local.tunnel_wildcard_service
+        },
+        {
+          service = "http_status:404"
+        }
+      ]
+    )
   }
-}
-
-# All hostnames that the tunnel handles. Specific records are required for
-# each hostname referenced in the tunnel ingress; the wildcard catches the rest
-# (Coolify-deployed apps).
-locals {
-  tunnel_hostnames = toset([
-    "coolify",   # Coolify UI (Coolify LXC :8000)
-    "auth",      # Authelia UI (gateway LXC :80)
-    "adguard",   # AdGuard admin UI (proxied via gateway LXC with SSO)
-    "*",         # wildcard for Coolify-deployed apps
-  ])
 }
 
 resource "cloudflare_dns_record" "tunnel" {

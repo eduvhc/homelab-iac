@@ -90,30 +90,16 @@ sub "coolify-runner-01 ($IP_RUNNER): install Docker"
 ssh root@"$IP_RUNNER" 'sh -s' < "$REPO_ROOT/configs/coolify-runner/scripts/bootstrap.sh"
 
 # ───────────────────────────────────────────────────────────────────────────────
-step "4/6" "install cloudflared on Coolify LXC ($IP_COOLIFY)"
+step "4/6" "install cloudflared connectors (Coolify + runner replica for HA)"
 TUNNEL_TOKEN=$(cd "$INFRA_DIR" && tofu output -raw tunnel_token)
-if ssh root@"$IP_COOLIFY" 'systemctl is-active --quiet cloudflared'; then
-  sub "cloudflared already running — skipping install"
-else
-  ssh root@"$IP_COOLIFY" "
-    set -e
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq
-    apt-get install -y -qq curl ca-certificates gnupg
-    mkdir -p --mode=0755 /usr/share/keyrings
-    if [ ! -s /usr/share/keyrings/cloudflare-main.gpg ]; then
-      curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
-        -o /usr/share/keyrings/cloudflare-main.gpg
-    fi
-    if [ ! -s /etc/apt/sources.list.d/cloudflared.list ]; then
-      echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared bookworm main' \
-        > /etc/apt/sources.list.d/cloudflared.list
-    fi
-    apt-get update -qq
-    apt-get install -y -qq cloudflared
-    cloudflared service install $TUNNEL_TOKEN
-  "
-fi
+# Same tunnel, two connectors → 8 outbound connections across 2 LXCs. If
+# either host reboots, the other keeps serving. Cloudflare routes to the
+# geographically closest replica automatically.
+for host in "$IP_COOLIFY" "$IP_RUNNER"; do
+  sub "cloudflared on $host"
+  ssh root@"$host" "TUNNEL_TOKEN=$TUNNEL_TOKEN sh -s" \
+    < "$REPO_ROOT/configs/cloudflared/scripts/install.sh"
+done
 
 # ───────────────────────────────────────────────────────────────────────────────
 step "5/6" "bootstrap Coolify (install + create root user + mint API token)"

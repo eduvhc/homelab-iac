@@ -1,5 +1,7 @@
 terraform {
-  required_version = ">= 1.7"
+  # 1.12 (2026-05): dynamic prevent_destroy, destroy=false lifecycle,
+  # faster concurrent provider installs.
+  required_version = ">= 1.12"
 
   required_providers {
     cloudflare = {
@@ -16,7 +18,7 @@ terraform {
     }
     proxmox = {
       source  = "bpg/proxmox"
-      version = "~> 0.94"
+      version = "~> 0.108"
     }
   }
 

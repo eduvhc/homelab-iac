@@ -1,0 +1,75 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tofu:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        stack: [infra, platform]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.0
+          tofu_wrapper: false
+
+      - name: fmt
+        run: tofu fmt -check -recursive iac/
+
+      - name: init (no backend, no providers download cache)
+        working-directory: iac/stacks/${{ matrix.stack }}
+        run: tofu init -backend=false -input=false
+
+      - name: validate
+        working-directory: iac/stacks/${{ matrix.stack }}
+        # `validate` reads encryption{} blocks which need the passphrase. Set a
+        # dummy value — we're not decrypting state, just checking config syntax.
+        env:
+          TF_VAR_tf_state_passphrase: ci-dummy-passphrase-not-a-real-secret
+        run: tofu validate
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }} # optional, free tier works without
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          find tools configs -type f \( -name '*.sh' -o -name 'sync.sh' -o -name 'bootstrap.sh' \) \
+            -print0 | xargs -0 shellcheck --severity=warning
+
+  tflint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        stack: [infra, platform]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+      - name: tflint init
+        working-directory: iac/stacks/${{ matrix.stack }}
+        run: tflint --init
+      - name: tflint run
+        working-directory: iac/stacks/${{ matrix.stack }}
+        run: tflint --minimum-failure-severity=warning

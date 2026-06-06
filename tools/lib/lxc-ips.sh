@@ -45,6 +45,21 @@ LAN_GATEWAY=$(_get network .lan_gateway)
 # Service URLs.
 COOLIFY_API_URL=$(_get coolify_api_url '')
 
+# Fail loud if any expected value is empty or "null" — envsubst would otherwise
+# silently render "" into the config files (e.g. AdGuard rewrites pointing to
+# nothing, Caddy reverse_proxy to http://:80).
+_val=
+for _var in IP_ADGUARD IP_GATEWAY IP_COOLIFY IP_RUNNER LAN_CIDR LAN_GATEWAY COOLIFY_API_URL; do
+  eval "_val=\$$_var"
+  case $_val in
+    ''|null)
+      echo "lxc-ips.sh: $_var is empty (tofu output returned '$_val') — has stacks/infra been applied?" >&2
+      exit 1
+      ;;
+  esac
+done
+unset _var _val
+
 export IP_ADGUARD IP_GATEWAY IP_COOLIFY IP_RUNNER ALL_LXC_IPS
 export LAN_CIDR LAN_GATEWAY COOLIFY_API_URL
 unset _infra_outputs

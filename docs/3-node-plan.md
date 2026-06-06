@@ -50,7 +50,7 @@ Quatro opções, em ordem de complexidade:
 
 ### C. Backup target
 
-**Recomendação: PBS dedicado num dos 3 nodes (LXC ou VM).**
+**Recomendação: PBS 4.2 dedicado num dos 3 nodes (LXC ou VM).**
 
 - Substitui o vzdump-para-USB. Dedupe ~10-20× em VMs parecidas.
 - LXC simples (oficialmente VM mas a comunidade usa LXC em homelab há anos)
@@ -58,6 +58,14 @@ Quatro opções, em ordem de complexidade:
 - O HDD USB sobrevive como **cópia secundária offline** (sync periódico do PBS para lá)
 
 PBS num **4º** dispositivo seria mais correcto (sobrevive à perda do host onde corre), mas tu ainda tens o Beelink + USB como "off-site improvisado".
+
+**Novidades PBS 4.2 (Abr 2026) que mudam o desenho:**
+
+- **Native S3 object storage backend**: o datastore pode ser um bucket S3-compat (MinIO local, Wasabi, Backblaze B2). Reduz a dependência do disco local do node onde PBS corre — se esse node morrer, o backup sobrevive no S3.
+- **Server-side encryption em push sync jobs**: ao replicar para um segundo PBS (ou para o HDD USB como datastore secundário), os snapshots são encriptados antes do envio. Útil para o teu "off-site improvisado" sem confiar no destino.
+- **Improved multi-datastore sync**: configurar PBS-no-LXC + cópia para HDD USB como segundo datastore com sync agendado fica nativo, sem rsync à parte.
+
+**Plano revisto**: PBS num LXC em `pve01` com datastore principal num bucket MinIO (correr MinIO noutro LXC ou usar o do Coolify), e cópia secundária para o HDD USB com server-side encryption.
 
 ### D. Roles dos nodes
 
