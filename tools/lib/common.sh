@@ -27,11 +27,12 @@
 # Optional xtrace via env (debugging without editing the script).
 [ "${TRACE:-0}" = "1" ] && set -x
 
-# ── Repo root: works whether sourced from tools/, services/<svc>/, or
-# services/<svc>/<sub>/. Relies on $0 being the calling script. ──────────────
+# ── Repo root: works whether sourced from tools/, services/<svc>/<sub>/,
+# or apps/<name>/. Relies on $0 being the calling script. ───────────────────
 _COMMON_DIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
 REPO_ROOT=${_COMMON_DIR%/tools*}
 REPO_ROOT=${REPO_ROOT%/services*}
+REPO_ROOT=${REPO_ROOT%/apps*}
 export REPO_ROOT
 unset _COMMON_DIR
 
