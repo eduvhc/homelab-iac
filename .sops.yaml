@@ -1,9 +1,52 @@
-# Sops creation rules — every encrypted file in this repo is encrypted with
-# the operator age key. Add more recipients by appending to the `age:` list
-# and running `sops updatekeys <file>` to re-encrypt existing files.
+# Sops recipients — one age key per MACHINE (not per person), so a lost
+# laptop can be revoked without rotating everyone else.
+#
+# To onboard a new operator machine:
+#   1. On the new machine: age-keygen -o ~/.config/sops/age/keys.txt
+#                          chmod 600 ~/.config/sops/age/keys.txt
+#                          grep -oE 'age1[a-z0-9]+' ~/.config/sops/age/keys.txt
+#   2. Send the PUBLIC key (age1...) to an existing operator.
+#   3. Existing operator (with a working key):
+#        - append a new `- &name age1...` line below
+#        - append `- *name` to each creation_rule's age list
+#        - sops updatekeys -y iac/secrets.sops.yaml
+#        - git add .sops.yaml iac/secrets.sops.yaml && git commit && git push
+#      (Mirror the change in github.com/eduvhc/iedora/.sops.yaml too;
+#       both repos must share recipients so the same person can decrypt
+#       platform secrets + app-runtime secrets.)
+#   4. New operator pulls + decrypts.
+#
+# To revoke a machine (lost/stolen/team departure):
+#   1. Remove its `- &name age1...` line + the matching `- *name` entries.
+#   2. sops updatekeys -y iac/secrets.sops.yaml (re-wraps DEK without that key)
+#   3. Commit + push.
+#   4. ROTATE the underlying secrets too (CF tokens, passwords) — updatekeys
+#      protects the file forward, but the revoked operator may already have
+#      decrypted-and-copied the old values.
+#
+# The PRIVATE key never leaves the machine where it was generated.
+# Human operators back theirs up in their personal Bitwarden vault (Secure
+# Note) for disaster recovery. Bot/ops keys are regenerable — if lost,
+# generate a new one + add as recipient via the onboarding flow above.
+
+keys:
+  # ── Eduardo ─────────────────────────────────────────────────────────────
+  - &eduardo_mac      age1867kx5pchlg2aty9tqhwvlyyjn6p2rmxlrn9czszusqjdu2acp9qakhet5
+  - &eduardo_ops      age1gr7uc2rxwwk75s50rz3ctftd60rg8xvj8vepa092ap2enm8ylgkscfdqgr
+  # - &eduardo_windows  age1...  # uncomment + paste when bootstrapping Windows
+
+  # ── (template — duplicate this block per new human) ─────────────────────
+  # - &joao_mac      age1...
+  # - &joao_windows  age1...
+
 creation_rules:
   - path_regex: secrets\.sops\.yaml$
-    age: age1867kx5pchlg2aty9tqhwvlyyjn6p2rmxlrn9czszusqjdu2acp9qakhet5
+    key_groups:
+      - age:
+          - *eduardo_mac
+          - *eduardo_ops
+          # - *eduardo_windows
+          # - *joao_mac
     # Only encrypt all-caps keys (the secret values themselves). YAML
     # comments + structure stay plain → git diff remains useful.
     encrypted_regex: '^[A-Z][A-Z0-9_]+$'
