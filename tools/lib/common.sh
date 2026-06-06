@@ -66,7 +66,8 @@ require_cmd() {
   [ -z "$_missing" ] || die "missing required command(s):$_missing"
 }
 
-# source_envrc — source iac/.envrc (which exports BWS + R2 vars) once.
+# source_envrc — source iac/.envrc (which exports sops-decrypted secrets +
+# R2 backend vars + identifiers) once.
 # Idempotent: subsequent calls are no-ops within the same shell.
 source_envrc() {
   [ "${_ENVRC_SOURCED:-0}" = "1" ] && return 0

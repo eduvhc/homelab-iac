@@ -33,7 +33,9 @@ rotate-token}.sh` (idempotent).
   - Internet outbound
   - Repos on `pve-no-subscription`
   - SSH key auth for root (`PermitRootLogin prohibit-password`)
-- An **age key pair**. On a fresh machine: `age-keygen -o ~/.config/sops/age/keys.txt && chmod 600 ~/.config/sops/age/keys.txt`. Record the public key (printed at generation, format `age1...`); register it in `.sops.yaml` as a creation rule recipient. Lose this key = lose access to all encrypted secrets.
+- An **age key pair** on the operator workstation. See **Phase −1** below
+  for the canonical bootstrap. Lose this key = lose access to all
+  encrypted secrets in `iac/secrets.sops.yaml`.
 - A Cloudflare account with the `iedora.com` zone, and an API token with
   these scopes (you'll be prompted to paste it during `seed-secrets.sh`):
   - `Account / Cloudflare Tunnel: Edit`
@@ -54,6 +56,41 @@ rotate-token}.sh` (idempotent).
 
 LXCs 102/103/200/210 are tofu-managed (bpg/proxmox). LXC 101 is manual
 because it's where tofu itself lives.
+
+## Phase −1 — Age key on the operator workstation
+
+**Do this first** (once, ever, per workstation). It's the only secret
+that doesn't live in encrypted form anywhere; if you lose it, the
+encrypted `iac/secrets.sops.yaml` is unrecoverable.
+
+```bash
+# Generate the key pair
+mkdir -p ~/.config/sops/age && chmod 700 ~/.config/sops/age
+age-keygen -o ~/.config/sops/age/keys.txt
+chmod 600 ~/.config/sops/age/keys.txt
+
+# Record the public key for .sops.yaml (format: age1...)
+grep -oE 'age1[a-z0-9]+' ~/.config/sops/age/keys.txt
+```
+
+**Back up the private key immediately**: paste the contents of
+`~/.config/sops/age/keys.txt` into your personal password manager
+(Bitwarden vault, 1Password, etc.) as a Secure Note. Don't skip this —
+key loss is the only catastrophic failure mode of the sops model.
+
+Then update the repo's [`.sops.yaml`](../.sops.yaml) so future
+`sops` invocations encrypt for your key. For a new homelab clone:
+
+```yaml
+creation_rules:
+  - path_regex: secrets\.sops\.yaml$
+    age: age1<your-public-key-here>
+    encrypted_regex: '^[A-Z][A-Z0-9_]+$'
+```
+
+For an existing homelab adding a second operator: add the new key as a
+second recipient (comma-separated `age:` list), then re-encrypt with
+`sops updatekeys iac/secrets.sops.yaml`. Both keys can then decrypt.
 
 ## Phase 0 — Bootstrap the ops LXC
 

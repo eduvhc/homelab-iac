@@ -3,7 +3,8 @@
 # skips install if Coolify is already present; enabling the API is a no-op
 # when already enabled.
 #
-# Run from the ops LXC (needs ssh root@$HOST). Doesn't touch BWS.
+# Run from the ops LXC (needs ssh root@$HOST). Doesn't touch secrets —
+# the API token is minted later by bootstrap-user.sh + rotate-token.sh.
 
 set -eu
 

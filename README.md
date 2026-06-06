@@ -77,8 +77,14 @@ already running with an API token in `iac/secrets.sops.yaml`.
 The from-zero flow:
 
 ```bash
-# On the ops LXC, after cloning the repo
+# Phase −1 (on operator machine, once ever):
+age-keygen -o ~/.config/sops/age/keys.txt && chmod 600 ~/.config/sops/age/keys.txt
+# → back up keys.txt to your personal Bitwarden/1Password as a Secure Note
+# → register the public key in .sops.yaml
+
+# Phase 0-2 (on the ops LXC, after cloning the repo + scp'ing the age key):
 tools/seed-secrets.sh  # interactive — populates iac/secrets.sops.yaml + R2 bucket
+git add iac/secrets.sops.yaml && git commit && git push
 tools/apply.sh         # idempotent: infra → bootstraps → cloudflared → platform → crons
 ```
 
@@ -106,7 +112,9 @@ header comment with its source file, so the operator sees who owns it.
 | Edit AdGuard rewrites/filters | `services/adguard/AdGuardHome.yaml.tmpl` | `services/adguard/sync.sh` |
 | Add an Authelia OIDC client | `services/gateway/authelia/configuration.yml` | `services/gateway/authelia/sync.sh` |
 | Add a Caddy reverse proxy entry | `services/gateway/caddy/Caddyfile.tmpl` | `services/gateway/caddy/sync.sh` |
-| Rotate the Coolify API token | (nothing in code) | `services/coolify/rotate-token.sh` |
+| Rotate the Coolify API token | (nothing in code) | `services/coolify/rotate-token.sh` → `git commit && push` |
+| Rotate any other secret | `sops iac/secrets.sops.yaml` (interactive editor) | `git commit && push` |
+| Add a new operator (2nd age key) | append to `.sops.yaml` recipients | `sops updatekeys iac/secrets.sops.yaml` |
 
 Both tofu stacks share `iac/.envrc` (one `source` covers both). After any of
 the above: `git add … && git commit && git push`.
@@ -125,8 +133,15 @@ Three-tier model, organized by lifecycle:
   passwords, JWT secrets, AI keys per app). Never duplicated elsewhere.
 
 The age private key lives at `~/.config/sops/age/keys.txt` on each operator
-machine (Mac + ops LXC). Back it up in a personal password manager — losing
-it means the encrypted secrets can't be decrypted.
+machine (Mac + ops LXC).
+
+> [!IMPORTANT]
+> **Back up the age key immediately after generation.** Paste the contents
+> of `~/.config/sops/age/keys.txt` into your personal password manager
+> (Bitwarden Secure Note, 1Password, etc.). If you lose it AND every
+> machine that holds it, the encrypted secrets are unrecoverable —
+> including `TOFU_STATE_PASSPHRASE`, which means tofu state in R2 also
+> becomes unreadable.
 
 Secrets in `iac/secrets.sops.yaml`, grouped by lifecycle:
 

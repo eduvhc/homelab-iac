@@ -16,8 +16,8 @@ repos:
         args:
           - --args=-recursive
       - id: terraform_validate
-        # Skip in pre-commit because it requires `init` which hits BWS/Cloudflare.
-        # CI runs this with mocked credentials.
+        # Skip in pre-commit because it requires `init` which fetches providers
+        # from the registry. CI runs this with mocked credentials.
         stages: [manual]
       - id: terraform_tflint
         args:

@@ -2,8 +2,10 @@
 # service. Drift detection lives here because it spans both tofu stacks.
 # Future candidates: state-backup sync, security scans, repo-level health.
 #
-# Service-scoped crons live in services/<svc>/cron.yaml instead (e.g.
-# token rotation belongs to the service that owns the token).
+# Service-scoped crons live in services/<svc>/cron.yaml instead — for
+# anything that maintains a single service. (Note: secret rotations like
+# the Coolify API token are NOT cron-driven anymore — they write to
+# iac/secrets.sops.yaml which must be committed + pushed by a human.)
 #
 # Both file locations are assembled into /etc/cron.d/iac on the ops LXC by
 # tools/lib/assemble-crons (Go).
