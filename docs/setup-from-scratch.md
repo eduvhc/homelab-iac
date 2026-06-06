@@ -1,63 +1,53 @@
 # Setup from scratch
 
-End-to-end procedure for rebuilding the iedora homelab on a clean PVE host.
+End-to-end procedure to rebuild the iedora homelab from a clean PVE host.
 
-The OpenTofu config is split into two stacks (see `iac/stacks/`):
+## Architecture in 30 seconds
+
+Two OpenTofu stacks under `iac/stacks/`:
 
 - **`infra`** — PVE LXCs (102/103/200/210), Cloudflare tunnel, DNS records.
-  Pure infrastructure, no application-layer dependencies. Can be applied any
-  time the PVE host is reachable.
-- **`platform`** — Coolify-side API objects (private keys, registered servers).
-  Reads infra outputs via `terraform_remote_state`. Requires Coolify to be
-  bootstrapped and `COOLIFY_API_TOKEN` to exist in BWS.
+  Pure infrastructure, no application-layer dependencies. Data-driven from
+  `network/ips.yaml` + `services/<svc>/{lxc,tunnel-routes}.yaml`.
+- **`platform`** — Coolify-side API objects (private keys, registered
+  servers). Reads infra outputs via `terraform_remote_state`. Requires
+  Coolify to be bootstrapped and `COOLIFY_API_TOKEN` to exist in BWS.
 
-The bootstrap step between the two stacks is what installs Coolify itself and
-mints the API token — it's a script, not tofu. This split eliminates the
-old `-target=` hack and keeps blast radius scoped.
+State lives in **Cloudflare R2** (s3 backend, native `use_lockfile`,
+PBKDF2-AES-GCM encryption on top via OpenTofu's `encryption{}` block).
+
+The bootstrap between the two stacks is what installs Coolify itself and
+mints the API token — done by `services/coolify/{install,bootstrap-user,
+rotate-token}.sh` (idempotent).
 
 ## Prerequisites
 
 - A PVE 9.x host with:
   - LAN `192.168.50.0/24`, gateway `.1`
   - Internet outbound
-  - Repos on `pve-no-subscription` (not enterprise)
+  - Repos on `pve-no-subscription`
   - SSH key auth for root (`PermitRootLogin prohibit-password`)
-- A Bitwarden Secrets Manager (BWS) workspace with a project named `homelab`
-- A Cloudflare account with the `iedora.com` zone
-- A BWS access token (created via the Bitwarden web UI under "Machine accounts")
-
-Seed BWS **before** anything boots. Use `tools/seed-bws.sh` (from the ops LXC,
-after the repo is cloned and `.envrc` is configured):
-
-```bash
-tools/seed-bws.sh
-```
-
-The script is idempotent and:
-- auto-generates `TOFU_STATE_PASSPHRASE`, `IEDORA_ADMIN_PASSWORD`, `NTFY_TOPIC`
-- prompts for `CLOUDFLARE_API_TOKEN`, `PVE_API_TOKEN`, `IEDORA_ADMIN_NAME`, `IEDORA_ADMIN_EMAIL`
-- skips any secret that already exists
-
-For the `PVE_API_TOKEN` it tells you to run on the PVE host:
-```bash
-pveum user token add root@pam tofu --privsep=0
-```
-…then paste the resulting full token (`root@pam!tofu=<uuid>`).
-
-`COOLIFY_API_TOKEN` is created later, by `tools/apply.sh` (Phase 5 below).
+- A Bitwarden Secrets Manager workspace with a project named `homelab`
+- A Cloudflare account with the `iedora.com` zone, and an API token with
+  these scopes (you'll be prompted to paste it during BWS seeding):
+  - `Account / Cloudflare Tunnel: Edit`
+  - `Account / Zero Trust: Edit`
+  - `Account / Cloudflare R2: Edit`        ← state backend bucket
+  - `User    / API Tokens: Edit`           ← to mint the scoped R2 token
+  - `Zone    / DNS: Edit`
 
 ## Inventory snapshot
 
 | LXC | Hostname | IP | Tags | Purpose |
 |-----|----------|----|------|---------|
-| 101 | ops | .101 | infra;iac | Where tofu and bws CLI live, where this repo is cloned |
-| 102 | adguard | .30 | infra;dns | AdGuard Home; split-DNS rewrites |
+| 101 | ops | .101 | infra;iac | Where tofu + bws live; this repo is cloned here |
+| 102 | adguard | .30 | infra;dns | AdGuard Home + nftables; split-DNS for `*.iedora.com` |
 | 103 | gateway | .40 | infra;sso | Caddy + Authelia (SSO for admin UIs) |
-| 200 | coolify | .200 | coolify;control-plane | Coolify UI + cloudflared (tunnel terminator) |
-| 210 | coolify-runner-01 | .210 | coolify;runtime | Docker engine where deployed apps run |
+| 200 | coolify | .200 | coolify;control-plane | Coolify UI + cloudflared connector |
+| 210 | coolify-runner-01 | .210 | coolify;runtime | Docker engine + cloudflared connector (HA) |
 
-LXCs 102/103/200/210 are tofu-managed (bpg/proxmox provider). LXC 101 is
-manual because it's where tofu itself lives.
+LXCs 102/103/200/210 are tofu-managed (bpg/proxmox). LXC 101 is manual
+because it's where tofu itself lives.
 
 ## Phase 0 — Bootstrap the ops LXC
 
@@ -95,175 +85,144 @@ unzip /tmp/bws.zip -d /tmp/ && install -m 0755 /tmp/bws /usr/local/bin/bws
 bws config server-base https://vault.bitwarden.com
 
 # SSH key the ops LXC uses to: (a) ssh to other LXCs from bootstrap scripts,
-# (b) ssh to PVE host for the bpg provider's file-upload operations,
-# (c) clone iedora-iac from GitHub.
+# (b) ssh to PVE host for the bpg provider, (c) clone the repo from GitHub.
 ssh-keygen -t ed25519 -C "ops-lxc@iedora" -f /root/.ssh/id_ed25519 -N ""
 echo "→ paste the following into github.com/settings/keys AND into PVE's /root/.ssh/authorized_keys:"
 cat /root/.ssh/id_ed25519.pub
 ```
 
-Clone the repo and seed `.envrc`:
+Clone the repo:
 
 ```bash
-git clone --recurse-submodules git@github.com:eduvhc/iedora-iac.git /root/iedora-iac
-cd /root/iedora-iac/iac
-cp .envrc.example .envrc
-# Edit .envrc → paste BW_ORGANIZATION_ID
-echo "<BWS_ACCESS_TOKEN>" > /root/.bws-token && chmod 600 /root/.bws-token
+git clone git@github.com:eduvhc/iedora-iac.git /root/iedora-iac
+# References (upstream source for grep/read) are NOT submodules — fetch on demand:
+# /root/iedora-iac/tools/fetch-references.sh [<name>]
 ```
 
-## Phase 1-4 in one shot: `tools/apply.sh`
+Bootstrap the BWS access token + `.envrc` template:
 
-Once Phase 0 is done and BWS is seeded, the entire rebuild is a single
-command from the ops LXC:
+```bash
+echo "<BWS_ACCESS_TOKEN>" > /root/.bws-token && chmod 600 /root/.bws-token
+cp /root/iedora-iac/iac/.envrc.example /root/iedora-iac/iac/.envrc
+# Edit /root/iedora-iac/iac/.envrc → set BW_ORGANIZATION_ID
+```
+
+## Phase 1 — Seed Bitwarden Secrets Manager
+
+```bash
+/root/iedora-iac/tools/seed-bws.sh
+```
+
+The script is idempotent and:
+- auto-generates `TOFU_STATE_PASSPHRASE`, `IEDORA_ADMIN_PASSWORD`, `NTFY_TOPIC`
+- prompts for `CLOUDFLARE_API_TOKEN`, `PVE_ROOT_PASSWORD`, `IEDORA_ADMIN_NAME`, `IEDORA_ADMIN_EMAIL`
+- creates the `iedora-iac-state` R2 bucket + a bucket-scoped R2 API token →
+  saves `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID` to BWS
+- skips any secret that already exists
+
+`COOLIFY_API_TOKEN` is created later, by `tools/apply.sh` (Phase 5 of the
+apply orchestrator below).
+
+## Phase 2 — Apply everything: `tools/apply.sh`
+
+After BWS is seeded, the rebuild is a single command from the ops LXC:
 
 ```bash
 cd /root/iedora-iac
 tools/apply.sh
+# See `tools/apply.sh --help` for the per-phase breakdown.
 ```
 
-This does Phases 1 through 4 in sequence with idempotency at each step. The
-phases are documented below so you can run them individually if anything
-breaks mid-flight.
+This runs 8 idempotent phases in sequence:
 
-## Phase 1 — Apply the infra stack
+1. `tofu apply` infra stack — 4 LXCs, CF tunnel, DNS records
+2. Wait for LXCs to be SSH-reachable
+3. Per-LXC bootstrap scripts (adguard, gateway, coolify-runner)
+4. Install cloudflared connectors on coolify + runner (HA — 8 connections)
+5. Coolify install + create root user + ensure fresh API token
+6. `tofu apply` platform stack — register runner in Coolify
+7. Trigger Coolify's Docker engine validation on the runner
+8. Sync cron jobs to `/etc/cron.d/iac` (assembled from `iac/cron.yaml` +
+   `services/*/cron.yaml` via `tools/lib/assemble-crons` Go binary)
 
-Creates 4 LXCs + CF tunnel + DNS records in one shot.
+Expected total: ~3-5 min on a warm PVE.
 
-```bash
-cd /root/iedora-iac/iac
-source .envrc
-cd stacks/infra
-tofu init
-tofu apply
-```
+## Verification
 
-Expected: ~2 min. After this:
-- `192.168.50.{30,40,200,210}` answer on ICMP
-- CF dashboard shows `coolify-iedora` tunnel + 4 CNAMEs
-- `tofu output -raw tunnel_token` returns the connector token
-
-## Phase 2 — Bootstrap each service LXC
-
-Each LXC needs its application installed and configured. Bootstrap scripts
-are idempotent — safe to re-run.
+After apply, all three public URLs should return 2xx/3xx:
 
 ```bash
-cd /root/iedora-iac
-
-# Push ops pubkey to each LXC (so bootstrap.sh can ssh in)
-for ip in 30 40 200 210; do
-  ssh-copy-id -o StrictHostKeyChecking=accept-new root@192.168.50.$ip
+for u in https://coolify.iedora.com/api/health https://auth.iedora.com https://adguard.iedora.com; do
+  printf '%-45s ' "$u"; curl -sS -o /dev/null -w 'HTTP %{http_code}\n' "$u"
 done
-
-# AdGuard: install AGH binary + nftables rules
-ssh root@192.168.50.30 < services/adguard/bootstrap.sh
-services/adguard/sync.sh
-
-# Gateway: install Caddy + Authelia, generate Authelia internal secrets +
-# OIDC RSA pair, create systemd units
-ssh root@192.168.50.40 < services/gateway/bootstrap.sh
-services/gateway/authelia/sync.sh
-services/gateway/caddy/sync.sh
-
-# Coolify control plane: install Coolify, force-create root user via tinker,
-# mint "Open Tofu" API token, save COOLIFY_API_TOKEN to BWS
-services/coolify/bootstrap.sh
-
-# Coolify runner: install Docker
-ssh root@192.168.50.210 < services/coolify-runner-01/bootstrap.sh
 ```
 
-After AdGuard is up, point your router's DHCP option 6 (DNS server) at
-`192.168.50.30` so LAN devices use split-DNS.
+- coolify: `HTTP 200` (Coolify health endpoint)
+- auth: `HTTP 200` (Authelia login page)
+- adguard: `HTTP 302` (redirect to auth via Caddy forward_auth — correct)
 
-## Phase 3 — Install cloudflared on the Coolify LXC
+In the Coolify UI → Servers, `coolify-runner-01` should show `usable=true`.
 
-The tunnel was created in Phase 1; here we install the connector that
-terminates it on the Coolify LXC.
+## Tear-down + clean rebuild
 
 ```bash
-cd /root/iedora-iac/iac
-TUNNEL_TOKEN=$(cd stacks/infra && tofu output -raw tunnel_token)
-ssh root@192.168.50.200 "
-  mkdir -p --mode=0755 /usr/share/keyrings
-  curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
-    -o /usr/share/keyrings/cloudflare-main.gpg
-  echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared bookworm main' \
-    > /etc/apt/sources.list.d/cloudflared.list
-  apt update && apt install -y cloudflared
-  cloudflared service install $TUNNEL_TOKEN
-"
+tools/destroy.sh                 # asks "type destroy to confirm"
+AUTO_APPROVE=1 tools/destroy.sh  # scripted (no prompt)
 ```
 
-Verify: `https://coolify.iedora.com` resolves through the tunnel and shows
-the login page. Sign in with the `IEDORA_ADMIN_EMAIL` / `IEDORA_ADMIN_PASSWORD`.
+After destroy, `tools/apply.sh` recreates everything against the same R2
+state (which is now empty).
 
-## Phase 4 — Apply the platform stack
+## Backup target (PVE host setup, not iac/)
 
-Now that Coolify is up and `COOLIFY_API_TOKEN` is in BWS, the platform
-stack can register `coolify-runner-01` as a Coolify server.
-
-```bash
-cd /root/iedora-iac/iac/stacks/platform
-tofu init
-tofu apply
-```
-
-Expected: ~30 sec. After this:
-- Coolify UI → Servers shows `coolify-runner-01` as `usable=true` once
-  Coolify's async validator confirms Docker is reachable.
-
-## Phase 4.5 — Install drift detection cron
-
-Daily `tofu plan` check + ntfy push notification on any drift:
-
-```bash
-tools/install-drift-cron.sh
-```
-
-Subscribe to `https://ntfy.sh/<NTFY_TOPIC>` (value in BWS) in the ntfy app
-or browser to receive alerts. The cron runs at 06:30 UTC daily; tail
-`/var/log/iac-drift.log` to see history.
-
-## Phase 5 — Backup target
-
-`vzdump` writes to the `backup` storage (USB SSD at `/mnt/pve/backup`). On
-a fresh PVE you need to:
+`vzdump` writes to a `backup` storage. On fresh PVE you need to:
 
 1. Plug a USB SSD or use a permanent disk
-2. `mkfs.ext4 -L backup /dev/sdX1` (or partition it first)
+2. `mkfs.ext4 -L backup /dev/sdX1` (partition first if needed)
 3. Add to fstab using UUID with `nofail,x-systemd.device-timeout=10s,noatime`
 4. `pvesm add dir backup --path /mnt/pve/backup --content backup,iso,vztmpl --is_mountpoint 1`
 5. Confirm the daily `daily-all` vzdump job exists in `/etc/pve/jobs.cfg`
 
-See `docs/inventory.md` for the current PVE storage layout.
+See `docs/3-node-plan.md` for the longer-term backup strategy with PBS 4.2.
 
 ## Day-2 operations
 
 | What changed | Where you edit | What you run |
 |---|---|---|
-| LXC sizing / new LXC | `iac/stacks/infra/locals.tf` | `cd iac/stacks/infra && tofu apply` |
-| New CF tunnel hostname | `iac/stacks/infra/tunnel.tf` | `cd iac/stacks/infra && tofu apply` |
-| Add Coolify runner server | `iac/stacks/platform/runner.tf` | `cd iac/stacks/platform && tofu apply` |
-| AdGuard rewrites/filters | `services/adguard/AdGuardHome.yaml` | `services/adguard/sync.sh` |
+| Resize / retag an LXC | `services/<svc>/lxc.yaml` | `tofu apply` in `iac/stacks/infra` |
+| Move LXC to another PVE node | `services/<svc>/lxc.yaml` (`node:`) | `tofu apply` in `iac/stacks/infra` |
+| Add a new LXC | `network/ips.yaml` + `services/<new>/lxc.yaml` | `tofu apply` in `iac/stacks/infra` |
+| Add a CF tunnel route | `services/<svc>/tunnel-routes.yaml` | `tofu apply` in `iac/stacks/infra` |
+| Add a runner | new `services/coolify-runner-NN/` + `iac/stacks/platform/runner.tf` | `tofu apply` in `iac/stacks/platform` |
+| AdGuard rewrites/filters | `services/adguard/AdGuardHome.yaml.tmpl` | `services/adguard/sync.sh` |
 | Authelia OIDC client | `services/gateway/authelia/configuration.yml` | `services/gateway/authelia/sync.sh` |
-| Caddy reverse proxy entry | `services/gateway/Caddyfile` | `services/gateway/caddy/sync.sh` |
-| Rotate Coolify API token | (nothing in code) | `services/coolify/bootstrap.sh` |
+| Caddy reverse proxy entry | `services/gateway/caddy/Caddyfile.tmpl` | `services/gateway/caddy/sync.sh` |
+| Add/edit a cron job | `services/<svc>/cron.yaml` (or `iac/cron.yaml` if IaC-wide) | `tools/apply.sh` (phase 8 reconciles) |
+| Force-rotate the Coolify API token | (nothing in code) | `FORCE=1 services/coolify/rotate-token.sh` |
+
+All `sync.sh` and bootstrap scripts are idempotent (sha256 diff before
+scp+restart). Re-running them when nothing changed is a no-op.
 
 ## Recovery scenarios
 
-**Lost the ops LXC**: redo Phase 0. State lives in git (encrypted), so after
-clone + `source .envrc`, both `tofu plan` calls show "No changes".
+**Lost the ops LXC**: redo Phase 0 + clone repo. State lives in R2, so
+`tools/apply.sh` reconciles without losing track of resources. You'll
+need the BWS access token to re-source the R2 credentials.
 
 **Lost the tunnel token**: `cd iac/stacks/infra && tofu apply -replace=random_id.coolify_tunnel_secret`
-forces a new tunnel secret, then redo Phase 3 to reinstall cloudflared with
-the new token.
+forces a new tunnel secret; the next `tools/apply.sh` reinstalls
+cloudflared on both connectors with the new token.
 
-**Lost the Coolify API token**: re-run `services/coolify/bootstrap.sh`
-— it'll skip user creation (idempotent) and mint a fresh token into BWS.
-Then `cd iac/stacks/platform && tofu apply -replace=terraform_data.coolify_runner_01`
-re-registers the runner with the new token.
+**Lost / expired Coolify API token**: `FORCE=1 services/coolify/rotate-token.sh`
+mints a fresh token and saves to BWS. The 25-day cron (declared in
+`services/coolify/cron.yaml`) catches the expiry automatically.
 
 **Lost Bitwarden access**: recover the BWS account first (Bitwarden's own
-recovery flow), then rebuild from Phase 0.
+recovery flow), then rebuild from Phase 0. The R2 state survives — once
+BWS is back, `tofu init -migrate-state` is not needed because we never
+migrate; we just resume.
+
+**Corrupted R2 state**: `aws s3 cp s3://iedora-iac-state/infra/terraform.tfstate /backup/`
+should be a daily cron (TODO — not yet implemented, candidate for
+`iac/cron.yaml`). For now, the only safety net is OpenTofu's
+encryption + R2's 24h soft-delete window.

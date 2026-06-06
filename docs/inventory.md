@@ -56,14 +56,20 @@ When real hardware arrives, PBS on a dedicated machine becomes the
 backup target and the HDD is retired entirely.
 
 
-## LXCs as code (bpg/proxmox)
+## LXCs as code (bpg/proxmox, data-driven from YAML)
 
-The 4 service LXCs (102, 103, 200, 210) are defined declaratively in
-`iac/lxc.tf`. To resize, retag, repoint, or move to a different PVE node,
-edit the `local.lxcs` map and `tofu apply`.
+The 4 service LXCs (102, 103, 200, 210) are defined **declaratively in
+YAML**, not in `.tf`. The infra stack at `iac/stacks/infra/` discovers
+both files at apply time via `fileset()` + `yamldecode()`:
 
-LXC 101 (ops) is intentionally **not** here — it's where tofu runs. Bootstrap
-manually per `docs/setup-from-scratch.md` Step 0.
+- **`network/ips.yaml`** — central LAN topology + service-name → IP map.
+  IPs do NOT change when an LXC migrates between PVE nodes.
+- **`services/<svc>/lxc.yaml`** — per-LXC spec (vm_id, hostname, cores,
+  memory, disk, `node`, `features`, `tags`). Moving a service to another
+  PVE node = change the `node:` field — one line.
+
+LXC 101 (ops) is intentionally **not** declared — it's where tofu runs.
+Bootstrap manually per `docs/setup-from-scratch.md` Phase 0.
 
 ### Caveats of using bpg/proxmox
 
@@ -80,31 +86,46 @@ These are the rough edges to know:
 - The provider needs the PVE API to be reachable for **every** plan/apply,
   including for unrelated changes (CF DNS edits, etc.). If PVE is down,
   tofu is stuck. Accepted trade-off.
-- bpg has historical quirks with LXC features (`nesting`, `keyctl`,
-  `unprivileged`). If you see "feature ... is not supported" errors after
-  a bpg version bump, check `references/coolify` no wait, the bpg repo
-  upstream issues for breaking changes.
 
 ### Adding a new LXC
 
-```hcl
-locals {
-  lxcs = {
-    # ... existing entries ...
-    grafana = {
-      vm_id     = 250
-      hostname  = "grafana"
-      ip        = "192.168.50.250/24"
-      cores     = 1
-      memory_mb = 1024
-      swap_mb   = 256
-      disk_gb   = 10
-      tags      = ["obs", "metrics"]
-      features  = { nesting = false, keyctl = false }
-    }
-  }
-}
+Two file edits, then `tofu apply`. Example for a Grafana LXC on `pve02`:
+
+```yaml
+# network/ips.yaml — add a row
+services:
+  # ... existing ...
+  grafana:  192.168.50.250
+
+# services/grafana/lxc.yaml — create this file
+vm_id: 250
+hostname: grafana
+cores: 1
+memory_mb: 1024
+swap_mb: 256
+disk_gb: 10
+node: pve02
+tags: [obs, metrics]
+features: {nesting: false, keyctl: false}
 ```
 
-Then `tofu apply` creates the LXC. Bootstrap remains manual (run the
-relevant `services/<svc>/bootstrap.sh` from ops).
+```bash
+cd iac/stacks/infra && tofu apply
+```
+
+Bootstrap stays manual (per-service): create `services/grafana/bootstrap.sh`
+and have `tools/apply.sh` (or a one-off ssh) run it after the LXC is up.
+
+### Adding a tunnel route for the new LXC
+
+If the new LXC should be reachable from the public internet via the CF
+tunnel, create `services/grafana/tunnel-routes.yaml`:
+
+```yaml
+- hostname: grafana
+  upstream: {host: grafana, port: 3000}
+```
+
+The infra stack picks it up automatically — adds the DNS CNAME and the
+tunnel ingress rule on next `tofu apply`. Wildcard catch-all (`hostname: "*"`)
+is already owned by `services/coolify-runner-01/tunnel-routes.yaml`.
