@@ -99,7 +99,7 @@ installed automatically by `apply.sh` from `services/ops/iac.cron`
 | Edit AdGuard rewrites/filters | `services/adguard/AdGuardHome.yaml.tmpl` | `services/adguard/sync.sh` |
 | Add an Authelia OIDC client | `services/gateway/authelia/configuration.yml` | `services/gateway/authelia/sync.sh` |
 | Add a Caddy reverse proxy entry | `services/gateway/caddy/Caddyfile.tmpl` | `services/gateway/caddy/sync.sh` |
-| Rotate the Coolify API token | (nothing in code) | `services/coolify/bootstrap.sh` |
+| Rotate the Coolify API token | (nothing in code) | `services/coolify/rotate-token.sh` |
 
 Both tofu stacks share `iac/.envrc` (one `source` covers both). After any of
 the above: `git add … && git commit && git push`.
@@ -120,7 +120,7 @@ Secret names used:
 | `IEDORA_ADMIN_NAME` (shared) | `services/coolify/bootstrap.sh` | operator (one time) |
 | `IEDORA_ADMIN_EMAIL` (shared) | same | operator (one time) |
 | `IEDORA_ADMIN_PASSWORD` (shared with Authelia) | same | operator (one time) |
-| `COOLIFY_API_TOKEN` | platform stack: terraform_data registrations | `services/coolify/bootstrap.sh` (rotates) |
+| `COOLIFY_API_TOKEN` | platform stack: terraform_data registrations | `services/coolify/rotate-token.sh` (cron every 25d) |
 | `NTFY_TOPIC` | `tools/drift-check.sh` push notifications | `tools/seed-bws.sh` (random) |
 | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_ACCOUNT_ID` | `iac/.envrc` → tofu s3 backend (state in R2) | `tools/seed-bws.sh` (mints scoped CF token) |
 

@@ -99,8 +99,12 @@ for host in "$IP_COOLIFY" "$IP_RUNNER"; do
 done
 
 # ───────────────────────────────────────────────────────────────────────────────
-step "5/6" "bootstrap Coolify (install + create root user + mint API token)"
-COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/bootstrap.sh"
+step "5/8" "bootstrap Coolify (install + create root user + mint API token)"
+# Split for SRP: install (idempotent) + bootstrap-user (idempotent) +
+# rotate-token (always rotates by design — same script used by the cron).
+COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/install.sh"
+COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/bootstrap-user.sh"
+COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/rotate-token.sh"
 
 # ───────────────────────────────────────────────────────────────────────────────
 step "6/8" "tofu apply — stacks/platform (register runner in Coolify)"
