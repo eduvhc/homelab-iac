@@ -204,16 +204,23 @@ else
     exit 1
   fi
 
-  # 3. Create a bucket-scoped R2 API token (Object Read & Write). We use the
-  #    R2 temp-credentials endpoint with a permanent grant; this returns the
-  #    AWS-compatible accessKeyId + secretAccessKey directly (no SHA256 dance).
-  TOKEN_BODY=$(jq -nc --arg b "$R2_BUCKET" '{
+  # 3. Mint a bucket-scoped R2 API token via /user/tokens. The CF API has no
+  #    dedicated "R2 API token" endpoint that returns AWS-format creds, so we
+  #    create a regular API token scoped to this single R2 bucket and derive
+  #    AWS-style credentials per CF's convention:
+  #      Access Key ID     = token id
+  #      Secret Access Key = SHA-256 of the token value
+  #    Resource format is `com.cloudflare.edge.r2.bucket.<account>_<jurisdiction>_<bucket>`
+  #    where jurisdiction is `default` (non-EU/Fed buckets).
+  R2_RESOURCE="com.cloudflare.edge.r2.bucket.${ACCOUNT_ID}_default_${R2_BUCKET}"
+  TOKEN_BODY=$(jq -nc --arg r "$R2_RESOURCE" '{
     name: ("iedora-iac-tofu-state-" + (now | tostring | split(".")[0])),
     policies: [{
+      effect: "allow",
       permission_groups: [
         {id: "2efd5506f9c8494dacb1fa10a3e7d5b6", name: "Workers R2 Storage Bucket Item Write"}
       ],
-      resources: { ("com.cloudflare.api.account.r2.bucket." + $b): "*" }
+      resources: { ($r): "*" }
     }]
   }')
   TOKEN_RESP=$(cf_api POST '/user/tokens' "$TOKEN_BODY")
@@ -224,7 +231,6 @@ else
     echo "       (does CLOUDFLARE_API_TOKEN have 'User / API Tokens: Edit' scope?)" >&2
     exit 1
   fi
-  # R2 convention: Access Key ID = token ID, Secret = SHA-256 of the token value.
   SECRET=$(printf '%s' "$KEY_VAL" | sha256sum | cut -d' ' -f1)
 
   bws_create R2_ACCESS_KEY_ID "$KEY_ID" "R2 access key ID for tofu state backend (bucket-scoped). Minted by seed-bws.sh."
