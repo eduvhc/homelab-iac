@@ -37,7 +37,7 @@ rotate-token}.sh` (idempotent).
 - An **age key pair** on the operator workstation. See **Phase −1** below
   for the canonical bootstrap. Lose this key = lose access to all
   encrypted secrets in `iac/secrets.sops.yaml`.
-- A Cloudflare account with the `iedora.com` zone, and an API token with
+- A Cloudflare account with the homelab zone (the value you set as HOMELAB_DOMAIN in iac/secrets.sops.yaml), and an API token with
   these scopes (paste into `iac/secrets.sops.yaml` during Phase 1):
   - `Account / Cloudflare Tunnel: Edit`
   - `Account / Zero Trust: Edit`
@@ -50,7 +50,7 @@ rotate-token}.sh` (idempotent).
 | LXC | Hostname | IP | Tags | Purpose |
 |-----|----------|----|------|---------|
 | 101 | ops | .101 | infra;iac | Where tofu + sops + git live; this repo is cloned here |
-| 102 | adguard | .30 | infra;dns | AdGuard Home + nftables; split-DNS for `*.iedora.com` |
+| 102 | adguard | .30 | infra;dns | AdGuard Home + nftables; split-DNS for `*.<homelab_domain>` |
 | 103 | gateway | .40 | infra;sso | Caddy + Authelia (SSO for admin UIs) |
 | 200 | coolify | .200 | coolify;control-plane | Coolify UI + cloudflared connector |
 | 210 | coolify-runner-01 | .210 | coolify;runtime | Docker engine + cloudflared connector (HA) |
@@ -108,14 +108,17 @@ via the steps below.
 #                - *eduardo_ops
 #                - *eduardo_windows             ← add this line
 
-# 3. Re-wrap the DEK for the new recipient (run in homelab-iac and iedora):
+# 3. Re-wrap the DEK for the new recipient. Run in this repo + every
+#    consumer app repo that ships a sops file (each app has its own
+#    .sops.yaml + recipients list).
 cd ~/projects/personal/homelab-iac
 sops updatekeys -y iac/secrets.sops.yaml
 
-cd ~/projects/personal/iedora
-bun prod:env:updatekeys
+# Example: the iedora app keeps its app-runtime secrets in apps/web/.env.prod
+# and exposes an updatekeys helper script:
+#   cd ~/projects/personal/iedora && bun prod:env:updatekeys
 
-# 4. Commit + push BOTH repos.
+# 4. Commit + push every repo whose .sops.yaml changed.
 
 # 5. New machine: git pull → sops -d <file> works immediately.
 ```
@@ -126,11 +129,12 @@ bun prod:env:updatekeys
 # 1. Edit BOTH .sops.yaml: remove the recipient's `keys:` line and the
 #    matching `key_groups[0].age` reference.
 
-# 2. updatekeys re-wraps the DEK without the revoked key + rotates DEK:
+# 2. updatekeys re-wraps the DEK without the revoked key + rotates DEK.
+#    Run in this repo + every consumer app repo (each owns its own sops file):
 sops updatekeys -y iac/secrets.sops.yaml
-(cd ~/projects/personal/iedora && bun prod:env:updatekeys)
+# e.g. for the iedora app: (cd ~/projects/personal/iedora && bun prod:env:updatekeys)
 
-# 3. Commit + push BOTH repos.
+# 3. Commit + push every repo whose .sops.yaml changed.
 
 # 4. CRITICAL: rotate the underlying secrets too — CF token, PVE password,
 #    Coolify token, R2 creds. updatekeys protects the file FORWARD but the
@@ -258,7 +262,7 @@ Expected total: ~3-5 min on a warm PVE.
 After apply, all three public URLs should return 2xx/3xx:
 
 ```bash
-for u in https://coolify.iedora.com/api/health https://auth.iedora.com https://adguard.iedora.com; do
+for u in https://coolify.${HOMELAB_DOMAIN}/api/health https://auth.${HOMELAB_DOMAIN} https://adguard.${HOMELAB_DOMAIN}; do
   printf '%-45s ' "$u"; curl -sS -o /dev/null -w 'HTTP %{http_code}\n' "$u"
 done
 ```

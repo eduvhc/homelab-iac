@@ -1,4 +1,4 @@
-# Pre-commit hooks for iedora-iac.
+# Pre-commit hooks for homelab-iac.
 # Install: `pip install pre-commit && pre-commit install` (or `brew install pre-commit`)
 # Run on demand: `pre-commit run --all-files`
 #

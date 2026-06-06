@@ -18,13 +18,21 @@ cd "$SCRIPT_DIR"
 # Authelia runs on the gateway LXC, not its own LXC.
 HOST="root@$IP_GATEWAY"
 
+# Render configuration.yml.tmpl with HOMELAB_DOMAIN. Whitelist envsubst so
+# nothing else gets accidentally substituted.
+RENDER_DIR=$(mktemp -d)
+trap 'rm -rf "$RENDER_DIR"' EXIT
+envsubst '$HOMELAB_DOMAIN' < configuration.yml.tmpl > "$RENDER_DIR/configuration.yml"
+
 # Config files trigger `systemctl restart`; unit file additionally triggers
 # `daemon-reload`.
 CONFIG_CHANGED=0
 UNIT_CHANGED=0
 for f in configuration.yml users_database.yml; do
-  if needs_push "$f" "/etc/authelia/$f"; then
-    scp -q "$f" "$HOST:/etc/authelia/$f"
+  src=$f
+  [ "$f" = "configuration.yml" ] && src="$RENDER_DIR/configuration.yml"
+  if needs_push "$src" "/etc/authelia/$f"; then
+    scp -q "$src" "$HOST:/etc/authelia/$f"
     CONFIG_CHANGED=1
   fi
 done

@@ -28,7 +28,7 @@
 [ "${TRACE:-0}" = "1" ] && set -x
 
 # ── Repo root: derive from $0 when sourced by a script in tools/, services/,
-# or apps/. Cross-repo consumers (e.g. iedora/infra/tofu/.envrc) pre-set
+# or apps/. Cross-repo consumers (an app repo's infra/tofu/.envrc) pre-set
 # REPO_ROOT to point at this repo's root before sourcing; honour that. ───────
 if [ -z "${REPO_ROOT:-}" ]; then
   _COMMON_DIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
@@ -102,9 +102,11 @@ source_envrc() {
   export TF_VAR_cf_api_token="${CLOUDFLARE_API_TOKEN:-}"
   export TF_VAR_pve_root_password="${PVE_ROOT_PASSWORD:-}"
   export TF_VAR_coolify_api_token="${COOLIFY_API_TOKEN:-}"
-  export TF_VAR_r2_account_id="${R2_ACCOUNT_ID:-}"
+  export TF_VAR_domain="${HOMELAB_DOMAIN:-}"
 
   # R2 backend for tofu state (S3-compat; AWS_* are what the s3 backend reads).
+  # account_id in the endpoint is mandatory per CF docs — no S3-style host
+  # without it.
   export AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID:-}"
   export AWS_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY:-}"
   export AWS_REGION=auto

@@ -20,7 +20,7 @@ HOST="root@$IP_ADGUARD"
 RENDER_DIR=$(mktemp -d)
 trap 'rm -rf "$RENDER_DIR"' EXIT
 
-envsubst '$IP_GATEWAY $IP_COOLIFY' < AdGuardHome.yaml.tmpl > "$RENDER_DIR/AdGuardHome.yaml"
+envsubst '$IP_GATEWAY $IP_COOLIFY $HOMELAB_DOMAIN' < AdGuardHome.yaml.tmpl > "$RENDER_DIR/AdGuardHome.yaml"
 envsubst '$LAN_CIDR $IP_GATEWAY'   < nftables.conf.tmpl    > "$RENDER_DIR/nftables.conf"
 
 python3 -c "import yaml; yaml.safe_load(open('$RENDER_DIR/AdGuardHome.yaml'))"

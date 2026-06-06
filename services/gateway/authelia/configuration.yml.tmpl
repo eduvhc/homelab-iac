@@ -4,7 +4,7 @@ server:
 log:
   level: info
 totp:
-  issuer: iedora.com
+  issuer: ${HOMELAB_DOMAIN}
 authentication_backend:
   password_reset:
     disable: true
@@ -12,8 +12,8 @@ authentication_backend:
     path: /etc/authelia/users_database.yml
 session:
   cookies:
-  - domain: iedora.com
-    authelia_url: https://auth.iedora.com
+  - domain: ${HOMELAB_DOMAIN}
+    authelia_url: https://auth.${HOMELAB_DOMAIN}
 storage:
   local:
     path: /var/lib/authelia/db.sqlite3
@@ -24,10 +24,10 @@ access_control:
   default_policy: deny
   rules:
   - domain:
-    - auth.iedora.com
+    - auth.${HOMELAB_DOMAIN}
     policy: bypass
   - domain:
-    - '*.iedora.com'
+    - '*.${HOMELAB_DOMAIN}'
     policy: one_factor
 identity_providers:
   oidc:
@@ -58,7 +58,7 @@ identity_providers:
       require_pkce: true
       pkce_challenge_method: S256
       redirect_uris:
-      - https://coolify.iedora.com/auth/oidc/callback
+      - https://coolify.${HOMELAB_DOMAIN}/auth/oidc/callback
       scopes:
       - openid
       - profile

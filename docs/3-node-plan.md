@@ -153,8 +153,8 @@ Recomendação: **4b primeiro** (testa o pipeline PBS), depois 4a para o dia-a-d
 
 Após o LXC 200 estar no novo node:
 - Verifica que `cloudflared` arrancou (`systemctl status`)
-- Verifica que `https://coolify.iedora.com` ainda responde
-- Verifica que as apps (se já tiveres deployed) seguem em `<x>.iedora.com`
+- Verifica que `https://coolify.<homelab_domain>` ainda responde
+- Verifica que as apps (se já tiveres deployed) seguem em `<x>.<homelab_domain>`
 
 **Tunnel HA**: o mesmo tunnel pode correr em vários LXCs (4 conns por instância). Para redundância:
 ```bash

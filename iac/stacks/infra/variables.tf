@@ -18,8 +18,7 @@ variable "pve_root_password" {
 
 variable "domain" {
   type        = string
-  default     = "iedora.com"
-  description = "Root domain managed by this config."
+  description = "Root domain managed by this config. Set from HOMELAB_DOMAIN in iac/secrets.sops.yaml via source_envrc → TF_VAR_domain."
 }
 
 variable "proxmox_ssh_key_path" {

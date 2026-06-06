@@ -156,16 +156,16 @@ filtering:
   parental_block_host: family-block.dns.adguard.com
   safebrowsing_block_host: standard-block.dns.adguard.com
   rewrites:
-  - domain: auth.iedora.com
+  - domain: auth.${HOMELAB_DOMAIN}
     answer: ${IP_GATEWAY}
     enabled: true
-  - domain: adguard.iedora.com
+  - domain: adguard.${HOMELAB_DOMAIN}
     answer: ${IP_GATEWAY}
     enabled: true
-  - domain: '*.iedora.com'
+  - domain: '*.${HOMELAB_DOMAIN}'
     answer: ${IP_COOLIFY}
     enabled: true
-  - domain: iedora.com
+  - domain: ${HOMELAB_DOMAIN}
     answer: ${IP_COOLIFY}
     enabled: true
   safe_fs_patterns:

@@ -161,8 +161,8 @@ done
 
 # ── Summary ─────────────────────────────────────────────────────────────────
 printf '\n\033[1;32m✓ apply complete — homelab converged to desired state\033[0m\n'
-echo "  Coolify UI:  https://coolify.iedora.com"
-echo "  Authelia UI: https://auth.iedora.com"
-echo "  AdGuard UI:  https://adguard.iedora.com (via gateway with SSO)"
+echo "  Coolify UI:  https://coolify.${HOMELAB_DOMAIN}"
+echo "  Authelia UI: https://auth.${HOMELAB_DOMAIN}"
+echo "  AdGuard UI:  https://adguard.${HOMELAB_DOMAIN} (via gateway with SSO)"
 echo "  Admin email: $HOMELAB_ADMIN_EMAIL"
 echo "  Admin pass:  sops -d iac/secrets.sops.yaml | grep HOMELAB_ADMIN_PASSWORD"

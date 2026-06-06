@@ -16,10 +16,11 @@
 #
 # REQUIRED (operator):
 #   TOFU_STATE_PASSPHRASE, CLOUDFLARE_API_TOKEN, PVE_ROOT_PASSWORD,
-#   HOMELAB_ADMIN_PASSWORD, R2_ACCOUNT_ID, HOMELAB_ADMIN_NAME,
+#   HOMELAB_ADMIN_PASSWORD, HOMELAB_DOMAIN, HOMELAB_ADMIN_NAME,
 #   HOMELAB_ADMIN_EMAIL, NTFY_TOPIC
 #
 # AUTO (don't hand-edit):
+#   R2_ACCOUNT_ID                           ← derived from HOMELAB_DOMAIN
 #   R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY  ← this script (CF API mint)
 #   COOLIFY_API_TOKEN                       ← services/coolify/rotate-token.sh
 #
@@ -44,7 +45,7 @@ esac
 require_cmd sops age jq curl openssl
 
 TEMPLATE="$REPO_ROOT/iac/secrets.template.yaml"
-REQUIRED="TOFU_STATE_PASSPHRASE CLOUDFLARE_API_TOKEN PVE_ROOT_PASSWORD HOMELAB_ADMIN_PASSWORD R2_ACCOUNT_ID HOMELAB_ADMIN_NAME HOMELAB_ADMIN_EMAIL NTFY_TOPIC"
+REQUIRED="TOFU_STATE_PASSPHRASE CLOUDFLARE_API_TOKEN PVE_ROOT_PASSWORD HOMELAB_ADMIN_PASSWORD HOMELAB_DOMAIN HOMELAB_ADMIN_NAME HOMELAB_ADMIN_EMAIL NTFY_TOPIC"
 
 # ── 1. Bootstrap from template if missing ───────────────────────────────────
 if [ ! -f "$SOPS_FILE" ]; then
@@ -76,13 +77,27 @@ if [ -n "$missing" ]; then
   die "fill these via \`sops $SOPS_FILE\`:$missing"
 fi
 
-# ── 3. Mint R2 backend creds if absent ──────────────────────────────────────
-log_step "3/3" "R2 backend (bucket + scoped API token)"
+# ── 3. Mint R2 backend creds + derive account_id if absent ─────────────────
+log_step "3/3" "R2 backend (account_id + bucket + scoped API token)"
+
+CF_TOKEN=$(sops_get CLOUDFLARE_API_TOKEN); export CF_TOKEN
+
+# R2_ACCOUNT_ID: auto-derived from HOMELAB_DOMAIN (zone owner). Needed for the
+# R2 S3 endpoint URL (https://<id>.r2.cloudflarestorage.com). Tofu derives
+# its own copy via the cloudflare_zone data source — not consumed via env.
+if [ -z "$(sops_get R2_ACCOUNT_ID)" ]; then
+  HOMELAB_DOMAIN=$(sops_get HOMELAB_DOMAIN)
+  ACCOUNT_ID=$(cf_account_id_for_zone "$HOMELAB_DOMAIN")
+  [ -n "$ACCOUNT_ID" ] || die "could not derive account_id for zone $HOMELAB_DOMAIN — does CF token have Zone:Read?"
+  sops_set R2_ACCOUNT_ID "$ACCOUNT_ID"
+  log_info "derived R2_ACCOUNT_ID=$ACCOUNT_ID from zone $HOMELAB_DOMAIN"
+else
+  printf '  %-26s %s\n' "[skip] R2_ACCOUNT_ID" "(already derived)"
+fi
 
 if [ -n "$(sops_get R2_ACCESS_KEY_ID)" ] && [ -n "$(sops_get R2_SECRET_ACCESS_KEY)" ]; then
-  printf '  %-26s %s\n' "[skip] R2_*" "(already minted)"
+  printf '  %-26s %s\n' "[skip] R2_*KEY" "(already minted)"
 else
-  CF_TOKEN=$(sops_get CLOUDFLARE_API_TOKEN); export CF_TOKEN
   ACCOUNT_ID=$(sops_get R2_ACCOUNT_ID)
   R2_BUCKET=${R2_BUCKET:-homelab-iac-state}
   R2_LOCATION=${R2_LOCATION:-weur}

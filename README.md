@@ -1,24 +1,24 @@
 # homelab-iac
 
-Single source of truth for the iedora.com **homelab** on Proxmox VE.
+Single source of truth for the homelab on Proxmox VE.
 Agnostic of any specific app — apps run on top (via Coolify) and own
 their own infra (e.g. R2 buckets, env vars) in their own repos.
 
 ```
 PVE host (Beelink N100 today, 3-node cluster soon)
 ├── LXC 101  ops              — OpenTofu + sops + git (where this repo is cloned)
-├── LXC 102  adguard          — AdGuard Home (LAN DNS + split-DNS for *.iedora.com)
+├── LXC 102  adguard          — AdGuard Home (LAN DNS + split-DNS for *.<homelab_domain>)
 ├── LXC 103  gateway          — Caddy + Authelia (SSO for homelab admin UIs)
 ├── LXC 200  coolify          — Coolify control plane + cloudflared (CF tunnel)
 └── LXC 210  coolify-runner-01 — Docker engine where apps deployed by Coolify run
 ```
 
-Public access: `https://*.iedora.com` → Cloudflare tunnel → either Coolify
-control plane (for `coolify.iedora.com`), gateway/Caddy (for protected admin
+Public access: `https://*.<homelab_domain>` → Cloudflare tunnel → either Coolify
+control plane (for `coolify.<homelab_domain>`), gateway/Caddy (for protected admin
 UIs like `auth`, `adguard`), or Coolify's Traefik on the runner (for deployed
 apps via the wildcard).
 
-LAN access: AdGuard rewrites `*.iedora.com` to internal IPs, so LAN traffic
+LAN access: AdGuard rewrites `*.<homelab_domain>` to internal IPs, so LAN traffic
 bypasses the tunnel for latency.
 
 ## Layout
@@ -160,7 +160,7 @@ it never overwrites them.
 | `CLOUDFLARE_API_TOKEN` | infra stack + R2 bootstrap | dash → API Tokens (scopes in template) |
 | `PVE_ROOT_PASSWORD` | infra stack (bpg/proxmox provider) | set at PVE install |
 | `HOMELAB_ADMIN_PASSWORD` | `services/coolify/bootstrap-user.sh` | `openssl rand -base64 24`; change in UI after first login |
-| `R2_ACCOUNT_ID` | tofu s3 backend (R2 endpoint URL) | dash → Workers right-hand panel |
+| `HOMELAB_DOMAIN` | tofu (CF zone lookup + tunnel DNS), service config templates | the apex domain you own in Cloudflare |
 | `HOMELAB_ADMIN_NAME` / `EMAIL` | Coolify + Authelia admin user | your identity |
 | `NTFY_TOPIC` | drift-check alerts (threat model: spam only) | unguessable slug, e.g. `homelab-drift-$(openssl rand -hex 8)` |
 
@@ -168,6 +168,7 @@ it never overwrites them.
 
 | Key | Used by | Who writes it |
 |---|---|---|
+| `R2_ACCOUNT_ID` | R2 S3 endpoint URL (in `AWS_ENDPOINT_URL_S3`) | `tools/seed-secrets.sh` (derives from `HOMELAB_DOMAIN` via CF zone lookup) |
 | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | tofu s3 backend | `tools/seed-secrets.sh` (mints scoped CF token; access_key = token.id, secret = sha256(token.value)) |
 | `COOLIFY_API_TOKEN` | platform stack: terraform_data registrations | `services/coolify/rotate-token.sh` (every apply, ≥25d cadence) |
 

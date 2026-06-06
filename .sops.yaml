@@ -11,9 +11,9 @@
 #        - append `- *name` to each creation_rule's age list
 #        - sops updatekeys -y iac/secrets.sops.yaml
 #        - git add .sops.yaml iac/secrets.sops.yaml && git commit && git push
-#      (Mirror the change in github.com/eduvhc/iedora/.sops.yaml too;
-#       both repos must share recipients so the same person can decrypt
-#       platform secrets + app-runtime secrets.)
+#      (Mirror the change in every app repo's .sops.yaml too — both
+#       this platform repo and each app repo must share recipients so
+#       the same person can decrypt platform + app-runtime secrets.)
 #   4. New operator pulls + decrypts.
 #
 # To revoke a machine (lost/stolen/team departure):

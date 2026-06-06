@@ -38,12 +38,12 @@
 }
 
 # Authelia UI itself - no forward-auth (login page must be reachable)
-auth.iedora.com:80 {
+auth.${HOMELAB_DOMAIN}:80 {
     reverse_proxy localhost:9091
 }
 
 # AdGuard admin UI - protected
-adguard.iedora.com:80 {
+adguard.${HOMELAB_DOMAIN}:80 {
     import authelia
     reverse_proxy http://${IP_ADGUARD}:3000
 }

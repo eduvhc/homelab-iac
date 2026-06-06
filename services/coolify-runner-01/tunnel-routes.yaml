@@ -1,4 +1,4 @@
-# Wildcard route — catches every <app>.iedora.com that doesn't match a named
+# Wildcard route — catches every <app>.${HOMELAB_DOMAIN} that doesn't match a named
 # rule. Coolify's Traefik on the runner LXC owns deployed-app hostnames.
 #
 # Wildcard MUST point to a real IP (not localhost), because cloudflared runs
