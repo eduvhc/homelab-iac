@@ -155,20 +155,20 @@ at `iac/secrets.template.yaml` shows the expected layout and how to
 generate each value. `tools/seed-secrets.sh` validates these are present.
 It never overwrites them.
 
-| Key | Used by | How to generate |
+| Key | Used by | How to provide |
 |---|---|---|
-| `TOFU_STATE_PASSPHRASE` | tofu state encryption block | `openssl rand -base64 24` (one-time forever) |
 | `CLOUDFLARE_API_TOKEN` | infra stack + R2 bootstrap | dash → API Tokens (scopes in template) |
 | `PVE_ROOT_PASSWORD` | infra stack (bpg/proxmox provider) | set at PVE install |
-| `HOMELAB_ADMIN_PASSWORD` | `services/coolify/bootstrap-user.sh` | `openssl rand -base64 24`. Change in UI after first login |
 | `HOMELAB_DOMAIN` | tofu (CF zone lookup + tunnel DNS), service config templates | the apex domain you own in Cloudflare |
-| `HOMELAB_ADMIN_NAME` / `EMAIL` | Coolify + Authelia admin user | your identity |
 | `NTFY_TOPIC` | drift-check alerts (threat model: spam only) | unguessable slug, e.g. `homelab-drift-$(openssl rand -hex 8)` |
+| `HOMELAB_ADMIN_NAME` / `EMAIL` | Coolify + Authelia admin user | your identity |
+| `HOMELAB_ADMIN_PASSWORD` | `services/coolify/bootstrap-user.sh` | your choice. Set once, not auto-rotated. |
 
 **Auto-managed.** Don't hand-edit. Scripts/tofu overwrite.
 
 | Key | Used by | Who writes it |
 |---|---|---|
+| `TOFU_STATE_PASSPHRASE` | tofu state encryption block (defense in depth above R2 token) | `tools/seed-secrets.sh` (random, one-time forever). Pure plumbing, never read by humans. |
 | `R2_ACCOUNT_ID` | R2 S3 endpoint URL (in `AWS_ENDPOINT_URL_S3`) | `tools/seed-secrets.sh` derives it from `HOMELAB_DOMAIN` via CF zone lookup |
 | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | tofu s3 backend | `tools/seed-secrets.sh` mints a scoped CF token. access_key = token.id, secret = sha256(token.value) |
 | `COOLIFY_API_TOKEN` | platform stack: terraform_data registrations | `services/coolify/rotate-token.sh` (every apply, ≥25d cadence) |

@@ -15,11 +15,12 @@
 #   4. else               → no-op (print summary)
 #
 # REQUIRED (operator):
-#   TOFU_STATE_PASSPHRASE, CLOUDFLARE_API_TOKEN, PVE_ROOT_PASSWORD,
-#   HOMELAB_ADMIN_PASSWORD, HOMELAB_DOMAIN, HOMELAB_ADMIN_NAME,
-#   HOMELAB_ADMIN_EMAIL, NTFY_TOPIC
+#   CLOUDFLARE_API_TOKEN, PVE_ROOT_PASSWORD,
+#   HOMELAB_DOMAIN, NTFY_TOPIC,
+#   HOMELAB_ADMIN_NAME, HOMELAB_ADMIN_EMAIL, HOMELAB_ADMIN_PASSWORD
 #
 # AUTO (don't hand-edit):
+#   TOFU_STATE_PASSPHRASE                   ← random, generated here
 #   R2_ACCOUNT_ID                           ← derived from HOMELAB_DOMAIN
 #   R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY  ← this script (CF API mint)
 #   COOLIFY_API_TOKEN                       ← services/coolify/rotate-token.sh
@@ -45,7 +46,7 @@ esac
 require_cmd sops age jq curl openssl
 
 TEMPLATE="$REPO_ROOT/iac/secrets.template.yaml"
-REQUIRED="TOFU_STATE_PASSPHRASE CLOUDFLARE_API_TOKEN PVE_ROOT_PASSWORD HOMELAB_ADMIN_PASSWORD HOMELAB_DOMAIN HOMELAB_ADMIN_NAME HOMELAB_ADMIN_EMAIL NTFY_TOPIC"
+REQUIRED="CLOUDFLARE_API_TOKEN PVE_ROOT_PASSWORD HOMELAB_DOMAIN NTFY_TOPIC HOMELAB_ADMIN_NAME HOMELAB_ADMIN_EMAIL HOMELAB_ADMIN_PASSWORD"
 
 # ── 1. Bootstrap from template if missing ───────────────────────────────────
 if [ ! -f "$SOPS_FILE" ]; then
@@ -77,8 +78,18 @@ if [ -n "$missing" ]; then
   die "fill these via \`sops $SOPS_FILE\`:$missing"
 fi
 
-# ── 3. Mint R2 backend creds + derive account_id if absent ─────────────────
-log_step "3/3" "R2 backend (account_id + bucket + scoped API token)"
+# ── 3. Auto-fill the managed keys ──────────────────────────────────────────
+log_step "3/3" "auto-managed: TOFU_STATE_PASSPHRASE, R2 backend"
+
+# TOFU_STATE_PASSPHRASE: pure plumbing (encrypts state in R2; nobody reads
+# it except tofu). Generate once, persist forever — rotating means
+# re-encrypting all state.
+if [ -z "$(sops_get TOFU_STATE_PASSPHRASE)" ]; then
+  sops_set TOFU_STATE_PASSPHRASE "$(openssl rand -base64 24 | tr -d '/+=')"
+  log_info "generated TOFU_STATE_PASSPHRASE"
+else
+  printf '  %-26s %s\n' "[skip] TOFU_STATE_PASSPHRASE" "(already set)"
+fi
 
 CF_TOKEN=$(sops_get CLOUDFLARE_API_TOKEN); export CF_TOKEN
 

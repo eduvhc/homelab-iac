@@ -215,21 +215,21 @@ and mints the auto-managed R2 backend creds.
 sops /root/homelab-iac/iac/secrets.sops.yaml
 ```
 
-Required keys (operator-provided): `TOFU_STATE_PASSPHRASE`,
-`CLOUDFLARE_API_TOKEN`, `PVE_ROOT_PASSWORD`, `HOMELAB_ADMIN_PASSWORD`,
-`HOMELAB_DOMAIN`, `HOMELAB_ADMIN_NAME`, `HOMELAB_ADMIN_EMAIL`,
-`NTFY_TOPIC`.
+Required keys (operator-provided): `CLOUDFLARE_API_TOKEN`,
+`PVE_ROOT_PASSWORD`, `HOMELAB_DOMAIN`, `NTFY_TOPIC`,
+`HOMELAB_ADMIN_NAME`, `HOMELAB_ADMIN_EMAIL`, `HOMELAB_ADMIN_PASSWORD`.
 
 ```bash
-# 3. Re-run. Validates the above and mints R2 backend creds.
+# 3. Re-run. Validates the above and auto-fills the AUTO-managed keys.
 /root/homelab-iac/tools/seed-secrets.sh
 ```
 
-The script writes `R2_ACCOUNT_ID` (auto-derived from `HOMELAB_DOMAIN` via
-CF zone lookup), `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` into the
-encrypted file. CF API mint: access_key = token.id, secret =
-sha256(token.value). It also creates the `homelab-iac-state` R2 bucket if
-absent. Both ops are idempotent.
+The script writes the AUTO-managed keys into the encrypted file:
+`TOFU_STATE_PASSPHRASE` (random, one-time), `R2_ACCOUNT_ID` (derived from
+`HOMELAB_DOMAIN` via CF zone lookup), `R2_ACCESS_KEY_ID` and
+`R2_SECRET_ACCESS_KEY` (CF API mint: access_key = token.id, secret =
+sha256(token.value)). It also creates the `homelab-iac-state` R2 bucket
+if absent. All ops are idempotent.
 
 After this, **commit + push** `iac/secrets.sops.yaml`. The encrypted file
 is the source of truth, shared across operator machines via git.
