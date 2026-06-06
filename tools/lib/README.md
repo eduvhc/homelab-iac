@@ -7,7 +7,7 @@ contract — read the file for the authoritative API.
 | Library | Purpose | Key functions |
 |---|---|---|
 | `common.sh` | Preamble + logging used by every script | `log_info`, `log_step`, `log_warn`, `log_err`, `die`, `require_cmd`, `source_envrc` + `$REPO_ROOT`, `TRACE=1`, `NO_COLOR=1` |
-| `bws.sh` | Bitwarden Secrets Manager CLI helpers (cached) | `bws_has`, `bws_get`, `bws_id`, `bws_create`, `bws_put_or_update`, `bws_refresh`, `bws_project_id_by_name` |
+| `sops.sh` | SOPS+age helpers for `iac/secrets.sops.yaml` (cached) | `sops_has`, `sops_get`, `sops_set`, `sops_refresh` + `$SOPS_FILE` |
 | `cloudflare.sh` | Cloudflare API wrapper | `cf_api METHOD PATH [BODY]`, `cf_account_id_for_zone NAME` |
 | `lxc-ips.sh` | LXC IPs from tofu outputs (sourced after infra apply) | exports `IP_ADGUARD`, `IP_GATEWAY`, `IP_COOLIFY`, `IP_RUNNER`, `ALL_LXC_IPS`, `LAN_CIDR`, `LAN_GATEWAY`, `COOLIFY_API_URL` |
 | `sync.sh` | Idempotency helper for `services/*/sync.sh` | `needs_push LOCAL REMOTE` (sha256 diff) — pre-set `$HOST` |
@@ -19,7 +19,7 @@ Scripts under `tools/` use a relative path:
 ```sh
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 . "$SCRIPT_DIR/lib/common.sh"
-. "$SCRIPT_DIR/lib/bws.sh"
+. "$SCRIPT_DIR/lib/sops.sh"
 ```
 
 Scripts under `services/<svc>/` go up two levels:

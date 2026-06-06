@@ -8,7 +8,7 @@ Documento vivo. Atualizar à medida que os specs reais das 2 novas máquinas for
 |---|---|---|
 | PVE 9.2.3 | Beelink N100, 16 GB, SSD M.2 512 GB | OK, hardened |
 | Coolify LXC 200 | local-lvm, 4c/6G/60G | tunnel CF ativo |
-| Ops LXC 101 | local-lvm, 2c/512M/10G | tofu + bws + git |
+| Ops LXC 101 | local-lvm, 2c/512M/10G | tofu + sops + git |
 | Backups | HDD USB 2 TB SMR, vzdump diário | SMR é o teto; OK para dev/lab |
 | Tunnel CF | 1 réplica no LXC 200 | 4 conns ao edge |
 

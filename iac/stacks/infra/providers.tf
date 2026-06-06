@@ -5,9 +5,10 @@ terraform {
 
   # State lives in a Cloudflare R2 bucket (S3-compatible). Native
   # use_lockfile (OpenTofu 1.10+) replaces DynamoDB. Endpoint, creds,
-  # and region come from AWS_* env vars set by iac/.envrc (which reads
-  # them from BWS). State is still cifrado pelo encryption{} block
-  # below — defense in depth if R2 keys leak.
+  # and region come from AWS_* env vars set by iac/.envrc (which
+  # decrypts them from iac/secrets.sops.yaml via age). State is still
+  # encrypted by the encryption{} block below — defense in depth if R2
+  # keys leak.
   backend "s3" {
     bucket                      = "iedora-iac-state"
     key                         = "infra/terraform.tfstate"
@@ -30,10 +31,6 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
-    bitwarden-secrets = {
-      source  = "bitwarden/bitwarden-secrets"
-      version = "~> 1.0"
-    }
     proxmox = {
       source  = "bpg/proxmox"
       version = "~> 0.108"
@@ -55,8 +52,6 @@ terraform {
     }
   }
 }
-
-provider "bitwarden-secrets" {}
 
 provider "cloudflare" {
   api_token = local.cf_api_token

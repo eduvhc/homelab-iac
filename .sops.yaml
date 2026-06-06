@@ -1,0 +1,8 @@
+# Sops creation rules — every secrets.sops.yaml in this repo is encrypted
+# with the operator age key. Add more recipients here as needed.
+creation_rules:
+  - path_regex: secrets\.sops\.yaml$
+    age: age1867kx5pchlg2aty9tqhwvlyyjn6p2rmxlrn9czszusqjdu2acp9qakhet5
+    # Only encrypt all-caps keys (the secret values themselves). YAML
+    # comments + structure stay plain → git diff remains useful.
+    encrypted_regex: '^[A-Z][A-Z0-9_]+$'

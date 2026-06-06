@@ -11,10 +11,16 @@ Two OpenTofu stacks under `iac/stacks/`:
   `network/ips.yaml` + `services/<svc>/{lxc,tunnel-routes}.yaml`.
 - **`platform`** — Coolify-side API objects (private keys, registered
   servers). Reads infra outputs via `terraform_remote_state`. Requires
-  Coolify to be bootstrapped and `COOLIFY_API_TOKEN` to exist in BWS.
+  Coolify to be bootstrapped and `COOLIFY_API_TOKEN` to exist in
+  `iac/secrets.sops.yaml`.
 
 State lives in **Cloudflare R2** (s3 backend, native `use_lockfile`,
 PBKDF2-AES-GCM encryption on top via OpenTofu's `encryption{}` block).
+
+Secrets are encrypted with **age** via **sops** at `iac/secrets.sops.yaml`,
+committed to the repo; `iac/.envrc` decrypts them on every shell source.
+The age private key lives at `~/.config/sops/age/keys.txt` on operator
+machines (Mac + ops LXC). Back it up.
 
 The bootstrap between the two stacks is what installs Coolify itself and
 mints the API token — done by `services/coolify/{install,bootstrap-user,
@@ -27,9 +33,9 @@ rotate-token}.sh` (idempotent).
   - Internet outbound
   - Repos on `pve-no-subscription`
   - SSH key auth for root (`PermitRootLogin prohibit-password`)
-- A Bitwarden Secrets Manager workspace with a project named `homelab`
+- An **age key pair**. On a fresh machine: `age-keygen -o ~/.config/sops/age/keys.txt && chmod 600 ~/.config/sops/age/keys.txt`. Record the public key (printed at generation, format `age1...`); register it in `.sops.yaml` as a creation rule recipient. Lose this key = lose access to all encrypted secrets.
 - A Cloudflare account with the `iedora.com` zone, and an API token with
-  these scopes (you'll be prompted to paste it during BWS seeding):
+  these scopes (you'll be prompted to paste it during `seed-secrets.sh`):
   - `Account / Cloudflare Tunnel: Edit`
   - `Account / Zero Trust: Edit`
   - `Account / Cloudflare R2: Edit`        ← state backend bucket
@@ -40,7 +46,7 @@ rotate-token}.sh` (idempotent).
 
 | LXC | Hostname | IP | Tags | Purpose |
 |-----|----------|----|------|---------|
-| 101 | ops | .101 | infra;iac | Where tofu + bws live; this repo is cloned here |
+| 101 | ops | .101 | infra;iac | Where tofu + sops + git live; this repo is cloned here |
 | 102 | adguard | .30 | infra;dns | AdGuard Home + nftables; split-DNS for `*.iedora.com` |
 | 103 | gateway | .40 | infra;sso | Caddy + Authelia (SSO for admin UIs) |
 | 200 | coolify | .200 | coolify;control-plane | Coolify UI + cloudflared connector |
@@ -66,7 +72,7 @@ pct create 101 local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst \
 Inside `ops`:
 
 ```bash
-apt update && apt install -y curl gnupg git jq ripgrep unzip python3-yaml
+apt update && apt install -y curl gnupg git jq ripgrep age python3-yaml
 
 # OpenTofu
 curl -fsSL https://packages.opentofu.org/opentofu/tofu/gpgkey | \
@@ -75,14 +81,10 @@ echo "deb [signed-by=/usr/share/keyrings/opentofu.gpg] https://packages.opentofu
   > /etc/apt/sources.list.d/opentofu.list
 apt update && apt install -y tofu
 
-# bws CLI (latest stable)
-LATEST=$(curl -fsSL "https://api.github.com/repos/bitwarden/sdk-sm/releases?per_page=50" | \
-  jq -r '.[] | select(.tag_name | startswith("bws-v")) | .tag_name' | sort -V | tail -1)
-VER=${LATEST#bws-v}
-curl -fsSL "https://github.com/bitwarden/sdk-sm/releases/download/${LATEST}/bws-x86_64-unknown-linux-gnu-${VER}.zip" \
-  -o /tmp/bws.zip
-unzip /tmp/bws.zip -d /tmp/ && install -m 0755 /tmp/bws /usr/local/bin/bws
-bws config server-base https://vault.bitwarden.com
+# sops (binary release; not in Debian repos)
+SOPS_VER=$(curl -fsSL https://api.github.com/repos/getsops/sops/releases/latest | jq -r .tag_name)
+curl -fsSL "https://github.com/getsops/sops/releases/download/${SOPS_VER}/sops-${SOPS_VER}.linux.amd64" \
+  -o /usr/local/bin/sops && chmod +x /usr/local/bin/sops
 
 # SSH key the ops LXC uses to: (a) ssh to other LXCs from bootstrap scripts,
 # (b) ssh to PVE host for the bpg provider, (c) clone the repo from GitHub.
@@ -99,36 +101,49 @@ git clone git@github.com:eduvhc/iedora-iac.git /root/iedora-iac
 # /root/iedora-iac/tools/fetch-references.sh [<name>]
 ```
 
-Bootstrap the BWS access token + `.envrc` template:
+Push the age private key from the operator's machine to the ops LXC so
+it can decrypt secrets too:
 
 ```bash
-echo "<BWS_ACCESS_TOKEN>" > /root/.bws-token && chmod 600 /root/.bws-token
-cp /root/iedora-iac/iac/.envrc.example /root/iedora-iac/iac/.envrc
-# Edit /root/iedora-iac/iac/.envrc → set BW_ORGANIZATION_ID
+# On the operator workstation
+ssh root@<ops-ip> 'mkdir -p ~/.config/sops/age && chmod 700 ~/.config/sops/age'
+scp ~/.config/sops/age/keys.txt root@<ops-ip>:~/.config/sops/age/keys.txt
+ssh root@<ops-ip> 'chmod 600 ~/.config/sops/age/keys.txt'
 ```
 
-## Phase 1 — Seed Bitwarden Secrets Manager
+Bootstrap the `.envrc` template:
 
 ```bash
-/root/iedora-iac/tools/seed-bws.sh
+cp /root/iedora-iac/iac/.envrc.example /root/iedora-iac/iac/.envrc
+# Edit /root/iedora-iac/iac/.envrc → set R2_ACCOUNT_ID, IEDORA_ADMIN_NAME/EMAIL,
+# (NTFY_TOPIC stays as placeholder until seed-secrets.sh suggests one)
+```
+
+## Phase 1 — Seed encrypted secrets
+
+```bash
+/root/iedora-iac/tools/seed-secrets.sh
 ```
 
 The script is idempotent and:
-- auto-generates `TOFU_STATE_PASSPHRASE`, `IEDORA_ADMIN_PASSWORD`, `NTFY_TOPIC`
+- creates `iac/secrets.sops.yaml` (if missing) — encrypted with the age key
+  registered in `.sops.yaml`
+- auto-generates `TOFU_STATE_PASSPHRASE`, `IEDORA_ADMIN_PASSWORD`
 - prompts for `CLOUDFLARE_API_TOKEN`, `PVE_ROOT_PASSWORD`
 - creates the `iedora-iac-state` R2 bucket + a bucket-scoped R2 API token →
-  saves `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` to BWS
-- reads `R2_ACCOUNT_ID`, `IEDORA_ADMIN_NAME`, `IEDORA_ADMIN_EMAIL`,
-  `BW_ORGANIZATION_ID` from `iac/.envrc` (you set these once when copying
-  from `.envrc.example`)
-- skips any secret that already exists
+  saves `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` into the encrypted file
+- prints a suggested `NTFY_TOPIC` for `iac/.envrc` (not a secret)
+- skips any key that already exists
+
+After this, **commit + push** `iac/secrets.sops.yaml` — the encrypted file
+is the source of truth, shared across operator machines via git.
 
 `COOLIFY_API_TOKEN` is created later, by `tools/apply.sh` (Phase 5 of the
 apply orchestrator below).
 
 ## Phase 2 — Apply everything: `tools/apply.sh`
 
-After BWS is seeded, the rebuild is a single command from the ops LXC:
+After secrets are seeded, the rebuild is a single command from the ops LXC:
 
 ```bash
 cd /root/iedora-iac
@@ -201,29 +216,33 @@ See `docs/3-node-plan.md` for the longer-term backup strategy with PBS 4.2.
 | Authelia OIDC client | `services/gateway/authelia/configuration.yml` | `services/gateway/authelia/sync.sh` |
 | Caddy reverse proxy entry | `services/gateway/caddy/Caddyfile.tmpl` | `services/gateway/caddy/sync.sh` |
 | Add/edit a cron job | `services/<svc>/cron.yaml` (or `iac/cron.yaml` if IaC-wide) | `tools/apply.sh` (phase 8 reconciles) |
-| Force-rotate the Coolify API token | (nothing in code) | `FORCE=1 services/coolify/rotate-token.sh` |
+| Add / rotate a secret | `sops iac/secrets.sops.yaml` (or `FORCE=1 services/coolify/rotate-token.sh` for Coolify) | commit + push the encrypted file |
 
 All `sync.sh` and bootstrap scripts are idempotent (sha256 diff before
 scp+restart). Re-running them when nothing changed is a no-op.
 
 ## Recovery scenarios
 
-**Lost the ops LXC**: redo Phase 0 + clone repo. State lives in R2, so
-`tools/apply.sh` reconciles without losing track of resources. You'll
-need the BWS access token to re-source the R2 credentials.
+**Lost the ops LXC**: redo Phase 0 + clone repo + restore age key to
+`~/.config/sops/age/keys.txt`. The encrypted secrets file in git decrypts
+immediately; state lives in R2 so `tools/apply.sh` reconciles without
+losing track of resources.
 
 **Lost the tunnel token**: `cd iac/stacks/infra && tofu apply -replace=random_id.coolify_tunnel_secret`
 forces a new tunnel secret; the next `tools/apply.sh` reinstalls
 cloudflared on both connectors with the new token.
 
 **Lost / expired Coolify API token**: `FORCE=1 services/coolify/rotate-token.sh`
-mints a fresh token and saves to BWS. The 25-day cron (declared in
-`services/coolify/cron.yaml`) catches the expiry automatically.
+mints a fresh token and writes it to `iac/secrets.sops.yaml`. Commit + push
+to share with other operator machines. There is no auto-cron — the script
+is operator-driven (it commits via git, which needs a human-supervised push).
 
-**Lost Bitwarden access**: recover the BWS account first (Bitwarden's own
-recovery flow), then rebuild from Phase 0. The R2 state survives — once
-BWS is back, `tofu init -migrate-state` is not needed because we never
-migrate; we just resume.
+**Lost the age private key**: catastrophic — without it the encrypted
+secrets file is unreadable. Restore from the backup in your personal
+password manager. As a last resort: re-run `tools/seed-secrets.sh` with a
+fresh age key to regenerate `TOFU_STATE_PASSPHRASE` etc., then re-encrypt
+all tofu state (`tofu init -migrate-state` after editing the encryption
+block to use the old → new passphrase mapping).
 
 **Corrupted R2 state**: `aws s3 cp s3://iedora-iac-state/infra/terraform.tfstate /backup/`
 should be a daily cron (TODO — not yet implemented, candidate for

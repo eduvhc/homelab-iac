@@ -12,18 +12,16 @@ set -eu
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/lib/common.sh"
-# shellcheck disable=SC1091
-. "$SCRIPT_DIR/lib/bws.sh"
 
 case "${1:-}" in
   -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 
-require_cmd tofu bws jq curl
+require_cmd tofu jq curl
 source_envrc
 
 LOG=${DRIFT_LOG:-/var/log/iac-drift.log}
-NTFY_TOPIC=$(bws_get NTFY_TOPIC || echo "")
+NTFY_TOPIC=${NTFY_TOPIC:-}
 
 log() {
   _ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -32,7 +30,7 @@ log() {
 
 notify() {
   # args: title body priority(default 3)
-  [ -n "$NTFY_TOPIC" ] && [ "$NTFY_TOPIC" != "null" ] || return 0
+  [ -n "$NTFY_TOPIC" ] || return 0
   curl -fsS \
     -H "Title: $1" -H "Priority: ${3:-3}" -H "Tags: warning,iedora" \
     -d "$2" "https://ntfy.sh/$NTFY_TOPIC" >/dev/null 2>&1 || \

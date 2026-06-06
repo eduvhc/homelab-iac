@@ -23,8 +23,8 @@ REFS='AdGuardHome	https://github.com/AdguardTeam/AdGuardHome.git	master
 opentofu	https://github.com/opentofu/opentofu.git	main
 cloudflared	https://github.com/cloudflare/cloudflared.git	master
 terraform-provider-cloudflare	https://github.com/cloudflare/terraform-provider-cloudflare.git	main
-terraform-provider-bitwarden-secrets	https://github.com/bitwarden/terraform-provider-bitwarden-secrets.git	main
-bitwarden-sdk-sm	https://github.com/bitwarden/sdk-sm.git	main
+sops	https://github.com/getsops/sops.git	main
+age	https://github.com/FiloSottile/age.git	main
 coolify	https://github.com/coollabsio/coolify.git	v4.x
 authelia	https://github.com/authelia/authelia.git	master
 caddy	https://github.com/caddyserver/caddy.git	master

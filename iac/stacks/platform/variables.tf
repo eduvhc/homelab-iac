@@ -1,15 +1,11 @@
 variable "tf_state_passphrase" {
   type        = string
   sensitive   = true
-  description = "Passphrase for OpenTofu state encryption. Same value as infra stack — fetched from BWS by .envrc."
+  description = "Passphrase for OpenTofu state encryption. Same value as infra stack — decrypted from iac/secrets.sops.yaml by .envrc."
 }
 
-variable "bws_keys" {
-  type = object({
-    coolify_api_token = string
-  })
-  default = {
-    coolify_api_token = "COOLIFY_API_TOKEN"
-  }
-  description = "Names of the BWS secrets used by this stack."
+variable "coolify_api_token" {
+  type        = string
+  sensitive   = true
+  description = "Coolify API token (format: <id>|<plain>). Decrypted from iac/secrets.sops.yaml by .envrc, exported as TF_VAR_coolify_api_token."
 }

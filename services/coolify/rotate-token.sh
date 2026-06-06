@@ -1,18 +1,18 @@
 #!/bin/bash
-# Ensure a fresh Coolify API token is in BWS. Idempotent: skips rotation if
-# the currently-stored token is valid for more than ROTATE_THRESHOLD_DAYS
-# (default 7). Forces rotation with FORCE=1.
+# Ensure a fresh Coolify API token is in iac/secrets.sops.yaml. Idempotent:
+# skips rotation if the stored token is valid for more than
+# ROTATE_THRESHOLD_DAYS (default 7). Forces rotation with FORCE=1.
 #
 # Decision tree on each run:
-#   • BWS has no COOLIFY_API_TOKEN          → mint
-#   • DB has no row for that token id       → mint (BWS value is stale)
-#   • days_to_expiry > ROTATE_THRESHOLD_DAYS → no-op (with status line)
-#   • else                                   → mint
+#   • secrets.sops.yaml has no COOLIFY_API_TOKEN → mint
+#   • DB has no row for that token id            → mint (stored value is stale)
+#   • days_to_expiry > ROTATE_THRESHOLD_DAYS     → no-op (with status line)
+#   • else                                        → mint
 #
-# Both tools/apply.sh AND the 25-day cron (services/coolify/cron.yaml) call
-# this script; the expiry check is what makes the rerun safe.
-#
-# Pre-reqs: install.sh + bootstrap-user.sh have run.
+# Pre-reqs: install.sh + bootstrap-user.sh have run; SOPS+age available.
+# After rotation the script ALSO updates the in-memory $COOLIFY_API_TOKEN
+# env var so the running session sees the new value. To persist for other
+# sessions/CI: `git add iac/secrets.sops.yaml && git commit && git push`.
 
 set -euo pipefail
 
@@ -20,15 +20,13 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/../../tools/lib/common.sh"
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/../../tools/lib/bws.sh"
+. "$SCRIPT_DIR/../../tools/lib/sops.sh"
 
 source_envrc
-require_cmd bws jq ssh
+require_cmd sops jq ssh
 
 HOST=${COOLIFY_HOST:-192.168.50.200}
 THRESHOLD=${ROTATE_THRESHOLD_DAYS:-7}
-BWS_PROJECT_ID=${BWS_HOMELAB_PROJECT_ID:-$(bws_project_id_by_name "${BWS_PROJECT_NAME:-homelab}")}
-export BWS_PROJECT_ID
 
 # ── Step 1: decide whether to rotate ─────────────────────────────────────────
 REASON=""
@@ -36,11 +34,11 @@ REASON=""
 if [ "${FORCE:-0}" = "1" ]; then
   REASON="FORCE=1"
 else
-  CURRENT=$(bws_get COOLIFY_API_TOKEN)
-  if [ -z "$CURRENT" ] || [ "$CURRENT" = "null" ]; then
-    REASON="no COOLIFY_API_TOKEN in BWS"
+  CURRENT=$(sops_get COOLIFY_API_TOKEN)
+  if [ -z "$CURRENT" ]; then
+    REASON="no COOLIFY_API_TOKEN in iac/secrets.sops.yaml"
   else
-    # BWS value is "id|plainTextToken" — look up by id.
+    # Stored value is "id|plainTextToken" — look up by id.
     TOKEN_ID=${CURRENT%%|*}
     DAYS_LEFT=$(ssh root@"$HOST" \
       "docker exec coolify php artisan tinker --execute='\
@@ -51,7 +49,7 @@ echo (int) floor(now()->diffInDays(\$t->expires_at, false));'" 2>/dev/null \
       | grep -E '^(-?[0-9]+|MISSING|NEVER)$' | tail -1 | tr -d '\r')
 
     case "$DAYS_LEFT" in
-      MISSING) REASON="BWS holds token id=$TOKEN_ID but it doesn't exist in Coolify DB (stale)" ;;
+      MISSING) REASON="stored token id=$TOKEN_ID doesn't exist in Coolify DB (stale)" ;;
       NEVER)   log_info "token id=$TOKEN_ID never expires — skipping rotation"; exit 0 ;;
       ''|*[!0-9-]*) REASON="couldn't determine expiry (got: '$DAYS_LEFT') — rotating defensively" ;;
       *)
@@ -99,7 +97,9 @@ TOKEN=$(ssh root@"$HOST" \
 
 [ -n "$TOKEN" ] || die "failed to mint Coolify API token"
 
-bws_put_or_update COOLIFY_API_TOKEN "$TOKEN" \
-  "Coolify API token (read+write). Managed by services/coolify/rotate-token.sh — 30-day TTL, refreshed when <7d remain."
+sops_set COOLIFY_API_TOKEN "$TOKEN"
+export COOLIFY_API_TOKEN="$TOKEN"
+export TF_VAR_coolify_api_token="$TOKEN"
 
 log_info "rotated → new id=${TOKEN%%|*}, expires in 30 days"
+log_info "  iac/secrets.sops.yaml updated. To persist: git add + commit + push."

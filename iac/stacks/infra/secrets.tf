@@ -1,17 +1,7 @@
-data "bitwarden-secrets_list_secrets" "all" {}
-
+# Secrets come from iac/secrets.sops.yaml, decrypted by iac/.envrc on shell
+# source and exposed as TF_VAR_* env vars. Tofu sees them as regular sensitive
+# variables — see variables.tf for declarations.
 locals {
-  bws_ids = { for s in data.bitwarden-secrets_list_secrets.all.secrets : s.key => s.id }
-}
-
-data "bitwarden-secrets_secret" "cf_api_token" {
-  id = local.bws_ids[var.bws_keys.cf_api_token]
-}
-data "bitwarden-secrets_secret" "pve_root_password" {
-  id = local.bws_ids[var.bws_keys.pve_root_password]
-}
-
-locals {
-  cf_api_token      = data.bitwarden-secrets_secret.cf_api_token.value
-  pve_root_password = data.bitwarden-secrets_secret.pve_root_password.value
+  cf_api_token      = var.cf_api_token
+  pve_root_password = var.pve_root_password
 }

@@ -16,7 +16,7 @@
 #   8. sync ops LXC cron jobs           (assembled from services/*/cron.yaml)
 #
 # Pre-reqs:
-#   - All BWS secrets seeded (tools/seed-bws.sh)
+#   - All secrets seeded (tools/seed-secrets.sh)
 #   - iac/.envrc populated (copy from iac/.envrc.example)
 #   - Ops LXC has /root/.ssh/id_ed25519 trusted by PVE root
 #
@@ -30,15 +30,12 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/lib/common.sh"
-# shellcheck disable=SC1091
-. "$SCRIPT_DIR/lib/bws.sh"
-
 case "${1:-}" in
   -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 
 source_envrc
-require_cmd tofu ssh ssh-keygen scp jq bws curl
+require_cmd tofu ssh ssh-keygen scp jq sops age curl
 
 INFRA_DIR="$REPO_ROOT/iac/stacks/infra"
 PLATFORM_DIR="$REPO_ROOT/iac/stacks/platform"
@@ -160,4 +157,4 @@ echo "  Coolify UI:  https://coolify.iedora.com"
 echo "  Authelia UI: https://auth.iedora.com"
 echo "  AdGuard UI:  https://adguard.iedora.com (via gateway with SSO)"
 echo "  Admin email: $IEDORA_ADMIN_EMAIL"
-echo "  Admin pass:  bws secret list | jq -r '.[] | select(.key==\"IEDORA_ADMIN_PASSWORD\") | .value'"
+echo "  Admin pass:  sops -d iac/secrets.sops.yaml | grep IEDORA_ADMIN_PASSWORD"

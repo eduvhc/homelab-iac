@@ -17,10 +17,6 @@ terraform {
   }
 
   required_providers {
-    bitwarden-secrets = {
-      source  = "bitwarden/bitwarden-secrets"
-      version = "~> 1.0"
-    }
     tls = {
       source  = "hashicorp/tls"
       version = "~> 4.0"
@@ -50,5 +46,3 @@ terraform {
     }
   }
 }
-
-provider "bitwarden-secrets" {}

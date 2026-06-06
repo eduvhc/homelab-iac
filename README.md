@@ -4,7 +4,7 @@ Single source of truth for the iedora.com homelab on Proxmox VE.
 
 ```
 PVE host (Beelink N100 today, 3-node cluster soon)
-├── LXC 101  ops              — OpenTofu + bws CLI + git (where this repo is cloned)
+├── LXC 101  ops              — OpenTofu + sops + git (where this repo is cloned)
 ├── LXC 102  adguard          — AdGuard Home (LAN DNS + split-DNS for *.iedora.com)
 ├── LXC 103  gateway          — Caddy + Authelia (SSO for homelab admin UIs)
 ├── LXC 200  coolify          — Coolify control plane + cloudflared (CF tunnel)
@@ -59,17 +59,17 @@ iac/
   └── cron.yaml             IaC-wide cron jobs (drift detection)
 
 tools/                      Operator scripts:
-                            • apply.sh     — converge to desired state
-                            • destroy.sh   — tear down everything
-                            • seed-bws.sh  — seed BWS secrets + R2 bucket
-                            • drift-check.sh + lib/lxc-ips.sh + …
+                            • apply.sh         — converge to desired state
+                            • destroy.sh       — tear down everything
+                            • seed-secrets.sh  — populate iac/secrets.sops.yaml + R2 bucket
+                            • drift-check.sh + lib/{common,sops,cloudflare,sync,lxc-ips}.sh + …
 docs/                       How-to docs
 references/                 Upstream source fetched on demand
 ```
 
 The IaC split is by **dependency boundary**: `infra` has no application-layer
 dependencies and can apply against a clean PVE; `platform` needs Coolify
-already running with an API token in BWS.
+already running with an API token in `iac/secrets.sops.yaml`.
 
 ## Quickstart
 
@@ -78,7 +78,7 @@ The from-zero flow:
 
 ```bash
 # On the ops LXC, after cloning the repo
-tools/seed-bws.sh      # interactive — populates 10 BWS secrets + creates R2 bucket
+tools/seed-secrets.sh  # interactive — populates iac/secrets.sops.yaml + R2 bucket
 tools/apply.sh         # idempotent: infra → bootstraps → cloudflared → platform → crons
 ```
 
@@ -113,34 +113,40 @@ the above: `git add … && git commit && git push`.
 
 ## Secrets
 
-Two-tier model:
+Three-tier model, organized by lifecycle:
 
-- **BWS** (`homelab` project) — genuine secrets only. Rotatable, never printed.
+- **`iac/secrets.sops.yaml`** — genuine secrets, encrypted with **age** via
+  **sops**. Committed to git in encrypted form; decrypted on every shell
+  source by `iac/.envrc`. Edit with `sops iac/secrets.sops.yaml`.
 - **`iac/.envrc`** — non-secret identifiers + config (account IDs, admin
-  name/email, org IDs). Gitignored, `.envrc.example` is the template.
+  name/email, org IDs). Gitignored; `.envrc.example` is the committed
+  template with placeholders.
 - **Coolify UI** — env vars for apps deployed on the platform (DB
-  passwords, JWT secrets, AI keys per app). Never in BWS, never in git.
+  passwords, JWT secrets, AI keys per app). Never duplicated elsewhere.
 
-Secrets in BWS:
+The age private key lives at `~/.config/sops/age/keys.txt` on each operator
+machine (Mac + ops LXC). Back it up in a personal password manager — losing
+it means the encrypted secrets can't be decrypted.
 
-| Key | Used by | Who creates it |
-|---|---|---|
-| `TOFU_STATE_PASSPHRASE` | `iac/.envrc` (state encryption, both stacks) | `tools/seed-bws.sh` (random) |
-| `CLOUDFLARE_API_TOKEN` | infra stack: cloudflare provider + `seed-bws.sh` R2 bootstrap | operator (one time) |
-| `PVE_ROOT_PASSWORD` | infra stack: bpg/proxmox provider | operator (one time) |
-| `IEDORA_ADMIN_PASSWORD` (shared with Authelia) | `services/coolify/bootstrap-user.sh` | `tools/seed-bws.sh` (random) |
-| `COOLIFY_API_TOKEN` | platform stack: terraform_data registrations | `services/coolify/rotate-token.sh` (cron every 25d) |
-| `NTFY_TOPIC` | `tools/drift-check.sh` push notifications | `tools/seed-bws.sh` (random) |
-| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | `iac/.envrc` → tofu s3 backend (state in R2) | `tools/seed-bws.sh` (mints scoped CF token) |
+Secrets in `iac/secrets.sops.yaml`, grouped by lifecycle:
 
-Identifiers in `iac/.envrc` (placeholder values committed in `.envrc.example`):
+| Key | Group | Used by | Who creates it |
+|---|---|---|---|
+| `TOFU_STATE_PASSPHRASE` | bootstrap | `iac/.envrc` (state encryption) | `tools/seed-secrets.sh` (random; one-time forever) |
+| `IEDORA_ADMIN_PASSWORD` | bootstrap | `services/coolify/bootstrap-user.sh` | `tools/seed-secrets.sh` (random; change in UI after first login) |
+| `CLOUDFLARE_API_TOKEN` | reactive | infra stack (cloudflare provider) + `seed-secrets.sh` R2 bootstrap | operator pastes once; revokes + replaces freely |
+| `PVE_ROOT_PASSWORD` | reactive | infra stack (bpg/proxmox provider) | operator (set at PVE install) |
+| `COOLIFY_API_TOKEN` | reactive | platform stack: terraform_data registrations | `services/coolify/rotate-token.sh` (operator-driven, ≥25d cadence) |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | reactive | `iac/.envrc` → tofu s3 backend | `tools/seed-secrets.sh` (mints scoped CF token) |
+
+Identifiers + non-secret config in `iac/.envrc` (committed in `.envrc.example`):
 
 | Key | What it is |
 |---|---|
-| `BW_ORGANIZATION_ID` | Bitwarden organization UUID |
 | `R2_ACCOUNT_ID` | Cloudflare account ID — builds the R2 S3 endpoint |
 | `IEDORA_ADMIN_NAME` | Display name for Coolify + Authelia admin user |
 | `IEDORA_ADMIN_EMAIL` | Login email for Coolify + Authelia admin user |
+| `NTFY_TOPIC` | ntfy.sh topic slug for drift alerts (threat model: spam only) |
 
 Tofu state lives in **Cloudflare R2** (`iedora-iac-state` bucket, native
 S3 locking via `use_lockfile`). The state objects are additionally
@@ -162,13 +168,12 @@ Upstream source for the services this repo manages — fetched on demand into
 | Name | Used by |
 |---|---|
 | `AdGuardHome` | LXC 102 |
+| `sops` / `age` | secret encryption tooling on ops |
 | `coolify` | LXC 200 |
 | `coolify-docs` | LXC 200 (docs source) |
 | `opentofu` | LXC 101 |
 | `cloudflared` | LXC 200 |
 | `terraform-provider-cloudflare` | infra stack |
-| `terraform-provider-bitwarden-secrets` | both stacks |
-| `bitwarden-sdk-sm` | bws CLI in LXC 101 |
 | `authelia` | LXC 103 |
 | `caddy` | LXC 103 |
 

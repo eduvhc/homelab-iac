@@ -7,7 +7,7 @@ Single source of truth for what runs where. Keep in sync with PVE tags
 
 | ID  | Hostname            | IP                | Tags                 | Purpose |
 |-----|---------------------|-------------------|----------------------|---------|
-| 101 | ops                 | 192.168.50.101    | infra, iac           | OpenTofu, bws, git, sync ops |
+| 101 | ops                 | 192.168.50.101    | infra, iac           | OpenTofu, sops+age, git, sync ops |
 | 102 | adguard             | 192.168.50.30     | infra, dns           | AdGuard Home (DNS + split-DNS rewrites for *.iedora.com) |
 | 103 | gateway             | 192.168.50.40     | infra, sso           | Caddy + Authelia (SSO for homelab admin UIs) |
 | 200 | coolify             | 192.168.50.200    | coolify, control-plane | Coolify UI + cloudflared (CF tunnel terminator) |

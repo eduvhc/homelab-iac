@@ -1,29 +1,27 @@
 #!/bin/bash
-# Create the Coolify root user from BWS-stored credentials. Idempotent:
+# Create the Coolify root user from secrets-managed credentials. Idempotent:
 # if a user with the same email already exists, this is a no-op.
 # Disables open registration after creating the first user.
 #
 # Pre-reqs: install.sh has run.
-# Inputs: IEDORA_ADMIN_{NAME,EMAIL} from iac/.envrc (non-secret config);
-#         IEDORA_ADMIN_PASSWORD from BWS (genuine secret).
+# Inputs (all from iac/.envrc):
+#   IEDORA_ADMIN_NAME, IEDORA_ADMIN_EMAIL — plain config
+#   IEDORA_ADMIN_PASSWORD — decrypted from iac/secrets.sops.yaml
 
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/../../tools/lib/common.sh"
-# shellcheck disable=SC1091
-. "$SCRIPT_DIR/../../tools/lib/bws.sh"
 
 source_envrc
-require_cmd bws jq ssh
+require_cmd jq ssh
 
 HOST=${COOLIFY_HOST:-192.168.50.200}
 
 ADMIN_NAME=${IEDORA_ADMIN_NAME:?must be set in iac/.envrc}
 ADMIN_EMAIL=${IEDORA_ADMIN_EMAIL:?must be set in iac/.envrc}
-ADMIN_PASSWORD=$(bws_get IEDORA_ADMIN_PASSWORD)
-[ -n "$ADMIN_PASSWORD" ] || die "IEDORA_ADMIN_PASSWORD missing in BWS"
+ADMIN_PASSWORD=${IEDORA_ADMIN_PASSWORD:?must be in iac/secrets.sops.yaml (sourced by .envrc)}
 
 ESC_NAME=$(printf '%s' "$ADMIN_NAME" | sed "s/'/'\\\\''/g")
 ESC_EMAIL=$(printf '%s' "$ADMIN_EMAIL" | sed "s/'/'\\\\''/g")
