@@ -85,7 +85,7 @@ $plainTextToken = $plain . hash('crc32b', $plain);
 $tok = $user->tokens()->create([
     'name' => 'Open Tofu',
     'token' => hash('sha256', $plainTextToken),
-    'abilities' => ['read', 'write'],
+    'abilities' => ['read', 'write', 'deploy'],
     'expires_at' => now()->addDays(30),
     'team_id' => 0,
 ]);
