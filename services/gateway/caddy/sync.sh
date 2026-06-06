@@ -3,14 +3,14 @@
 # reload Caddy.
 set -e
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_ROOT=${SCRIPT_DIR%/configs/*}
+REPO_ROOT=${SCRIPT_DIR%/services/*}
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # shellcheck disable=SC1091
 . "$REPO_ROOT/iac/.envrc"
 # shellcheck disable=SC1091
 . "$REPO_ROOT/tools/lib/lxc-ips.sh"
 
-cd "$SCRIPT_DIR/.."
+cd "$SCRIPT_DIR"
 HOST="root@$IP_GATEWAY"
 
 RENDER_DIR=$(mktemp -d)

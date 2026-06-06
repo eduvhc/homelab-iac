@@ -1,0 +1,15 @@
+# Network topology — single source of truth for the homelab LAN.
+# IPs do NOT change when LXCs migrate between PVE nodes (LAN is host-
+# independent). Service-name keys here MUST match folder names under
+# services/<svc>/. Adding a new service = add a key here + create
+# services/<svc>/lxc.yaml; the infra stack picks both up automatically.
+
+lan:
+  cidr: 192.168.50.0/24
+  gateway: 192.168.50.1
+
+services:
+  adguard:            192.168.50.30
+  gateway:            192.168.50.40
+  coolify:            192.168.50.200
+  coolify-runner-01:  192.168.50.210

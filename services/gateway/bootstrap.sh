@@ -2,7 +2,7 @@
 # One-time setup of a gateway LXC: installs Caddy + Authelia binaries +
 # generates Authelia internal secrets/RSA pair. Idempotent.
 # Config (Caddyfile, configuration.yml, users_database.yml) is pushed
-# via configs/{gateway,authelia}/scripts/sync.sh after.
+# via services/gateway/{caddy,authelia}/sync.sh after.
 set -e
 
 export DEBIAN_FRONTEND=noninteractive
@@ -65,5 +65,5 @@ systemctl daemon-reload
 systemctl enable caddy >/dev/null 2>&1
 systemctl enable authelia >/dev/null 2>&1 || true
 echo "==> gateway bootstrap complete. Now push configs:"
-echo "    configs/authelia/scripts/sync.sh"
-echo "    configs/gateway/scripts/sync.sh"
+echo "    services/gateway/authelia/sync.sh"
+echo "    services/gateway/caddy/sync.sh"

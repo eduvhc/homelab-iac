@@ -107,4 +107,4 @@ locals {
 ```
 
 Then `tofu apply` creates the LXC. Bootstrap remains manual (run the
-relevant `configs/<svc>/scripts/bootstrap.sh` from ops).
+relevant `services/<svc>/bootstrap.sh` from ops).

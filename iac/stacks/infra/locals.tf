@@ -1,75 +1,32 @@
-# Centralized IP and naming data. Anything that references an IP, hostname,
-# port, or service URL should reach into here, so changing an inventory
-# detail (e.g., moving a service to a different IP) is a one-line edit.
-#
-# Mirrors docs/inventory.md. Keep both in sync when adding/renumbering.
+# Inventory: data-driven from the repo. Each service owns its own spec at
+# services/<name>/lxc.yaml; the LAN topology (IP allocations + gateway) is
+# centralized in network/ips.yaml. Adding a new service = 1 entry in ips.yaml
+# + 1 new services/<svc>/lxc.yaml; nothing in this file changes.
 
 locals {
-  pve_node = "pve"
+  # ── Network topology (central) ───────────────────────────────────────────────
+  _network = yamldecode(file("${path.module}/../../../network/ips.yaml"))
 
-  # Network constants — used both inside tofu and by shell scripts (via
-  # tofu output -> tools/lib/lxc-ips.sh). Keep this block in sync with
-  # docs/inventory.md.
-  lan_cidr    = "192.168.50.0/24"
-  lan_gateway = "192.168.50.1"
+  lan_cidr    = local._network.lan.cidr
+  lan_gateway = local._network.lan.gateway
+  ips         = local._network.services # service-name -> IP
 
-  # IPs without prefix; service URLs and LXC `ip` strings add it.
-  ips = {
-    adguard           = "192.168.50.30"
-    gateway           = "192.168.50.40"
-    coolify           = "192.168.50.200"
-    coolify_runner_01 = "192.168.50.210"
-  }
-
-  # Service URLs derived from the above.
+  # Convenience derivations.
   coolify_api_url = "http://${local.ips.coolify}:8000"
 
-  # Per-LXC resource specs. Consumed by proxmox_virtual_environment_container's
-  # for_each in lxc.tf.
+  # ── Per-LXC specs (decentralized) ────────────────────────────────────────────
+  # Discover every services/<name>/lxc.yaml relative to this stack. The folder
+  # name becomes the service key and MUST match a key in network/ips.yaml.
+  _lxc_files = fileset("${path.module}/../../..", "services/*/lxc.yaml")
+
   lxcs = {
-    adguard = {
-      vm_id     = 102
-      hostname  = "adguard"
-      ip        = "${local.ips.adguard}/24"
-      cores     = 1
-      memory_mb = 512
-      swap_mb   = 256
-      disk_gb   = 2
-      tags      = ["infra", "dns"]
-      features  = { nesting = false, keyctl = false }
-    }
-    gateway = {
-      vm_id     = 103
-      hostname  = "gateway"
-      ip        = "${local.ips.gateway}/24"
-      cores     = 1
-      memory_mb = 512
-      swap_mb   = 256
-      disk_gb   = 4
-      tags      = ["infra", "sso"]
-      features  = { nesting = false, keyctl = false }
-    }
-    coolify = {
-      vm_id     = 200
-      hostname  = "coolify"
-      ip        = "${local.ips.coolify}/24"
-      cores     = 4
-      memory_mb = 6144
-      swap_mb   = 1024
-      disk_gb   = 60
-      tags      = ["coolify", "control-plane"]
-      features  = { nesting = true, keyctl = true }
-    }
-    coolify_runner_01 = {
-      vm_id     = 210
-      hostname  = "coolify-runner-01"
-      ip        = "${local.ips.coolify_runner_01}/24"
-      cores     = 2
-      memory_mb = 4096
-      swap_mb   = 1024
-      disk_gb   = 30
-      tags      = ["coolify", "runtime"]
-      features  = { nesting = true, keyctl = true }
-    }
+    for f in local._lxc_files :
+    split("/", f)[1] => merge(
+      yamldecode(file("${path.module}/../../../${f}")),
+      { ip = "${local.ips[split("/", f)[1]]}/24" }
+    )
   }
+
+  # PVE node assignments derived from each LXC's `node:` field. Useful if
+  # ever needed; bpg/proxmox reads it directly from per-LXC `node_name`.
 }

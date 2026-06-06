@@ -21,48 +21,85 @@ bypasses the tunnel for latency.
 
 ## Layout
 
+The repo is **service-centric**. Each homelab service owns its folder. Network
+topology (IP allocations) is centralized — moving a service between PVE nodes
+edits 1 line in `services/<svc>/lxc.yaml`.
+
 ```
-iac/stacks/infra/          OpenTofu stack: PVE LXCs (bpg) + CF tunnel + DNS
-iac/stacks/platform/       OpenTofu stack: Coolify-side API objects (runners, keys).
-                           Reads infra outputs via terraform_remote_state.
-configs/<svc>/             Config files for each service LXC
-configs/<svc>/scripts/     bootstrap.sh (one-time setup) + sync.sh (push config + reload)
-tools/                     Operator scripts (seed-bws, rebuild, drift-check)
-docs/                      How-to docs (setup-from-scratch, inventory, 3-node-plan)
-references/                Upstream source fetched on demand (for grep + reading)
+network/
+  └── ips.yaml              Central LAN topology + service-name → IP map
+
+services/
+  ├── adguard/              LXC 102: AGH + nftables
+  │   ├── lxc.yaml          ← container spec (vm_id, cores, mem, node, …)
+  │   ├── *.tmpl            ← config templates
+  │   ├── bootstrap.sh      ← one-time install
+  │   └── sync.sh           ← render + push + reload
+  ├── gateway/              LXC 103: Caddy + Authelia (two services, one host)
+  │   ├── lxc.yaml
+  │   ├── tunnel-routes.yaml ← CF tunnel routes served by this LXC
+  │   ├── caddy/            ← Caddyfile.tmpl + sync.sh
+  │   └── authelia/         ← configuration.yml + sync.sh + systemd unit
+  ├── coolify/              LXC 200: Coolify control plane (+ cloudflared)
+  │   ├── lxc.yaml
+  │   ├── tunnel-routes.yaml
+  │   └── bootstrap.sh
+  ├── coolify-runner-01/    LXC 210: Docker engine (+ cloudflared replica)
+  │   ├── lxc.yaml
+  │   └── bootstrap.sh
+  ├── cloudflared/          virtual service (runs on 200 + 210 for HA)
+  │   └── install.sh
+  └── ops/                  ops LXC config (not tofu-managed)
+      └── iac.cron          declarative /etc/cron.d/iac
+
+iac/stacks/
+  ├── infra/                OpenTofu: discovers services/*/lxc.yaml +
+  │                         services/*/tunnel-routes.yaml via fileset(),
+  │                         creates LXCs + CF tunnel + DNS.
+  └── platform/             OpenTofu: Coolify-side objects (runner registration)
+
+tools/                      Operator scripts:
+                            • apply.sh     — converge to desired state
+                            • destroy.sh   — tear down everything
+                            • seed-bws.sh  — seed BWS secrets + R2 bucket
+                            • drift-check.sh + lib/lxc-ips.sh + …
+docs/                       How-to docs
+references/                 Upstream source fetched on demand
 ```
 
-The split is by **dependency boundary**: `infra` has no application-layer
+The IaC split is by **dependency boundary**: `infra` has no application-layer
 dependencies and can apply against a clean PVE; `platform` needs Coolify
-already running with an API token in BWS. This lets each stack be applied
-without `-target=` flags.
+already running with an API token in BWS.
 
 ## Quickstart
 
-**To rebuild from a clean PVE**: follow [`docs/setup-from-scratch.md`](docs/setup-from-scratch.md).
-The from-zero flow boils down to:
+**To create from a clean PVE**: follow [`docs/setup-from-scratch.md`](docs/setup-from-scratch.md).
+The from-zero flow:
 
 ```bash
-# On ops LXC, after cloning the repo
-tools/seed-bws.sh      # interactive — populates 10 BWS secrets + creates R2 bucket (idempotent)
-tools/rebuild.sh       # one-shot orchestrator: infra → bootstraps → cloudflared → platform
+# On the ops LXC, after cloning the repo
+tools/seed-bws.sh      # interactive — populates 10 BWS secrets + creates R2 bucket
+tools/apply.sh         # idempotent: infra → bootstraps → cloudflared → platform → crons
 ```
 
+To **tear down everything**: `tools/destroy.sh` (asks for confirmation).
+
 Cron jobs (daily drift detection + 25-day Coolify token rotation) are
-installed automatically by `rebuild.sh` from `configs/ops-cron/iac.cron`
-— a single declarative source. Re-running `rebuild.sh` reconciles them.
+installed automatically by `apply.sh` from `services/ops/iac.cron`
+— a single declarative source. Re-running `apply.sh` reconciles them.
 
 **To make changes**:
 
 | What you want to do | Where you edit | What you run |
 |---|---|---|
-| Add/change LXC sizing or a new LXC | `iac/stacks/infra/locals.tf` | `cd iac/stacks/infra && tofu apply` |
-| Cloudflare DNS or tunnel ingress route | `iac/stacks/infra/tunnel.tf` | `cd iac/stacks/infra && tofu apply` |
-| Add a Coolify runner server | `iac/stacks/platform/runner.tf` | `cd iac/stacks/platform && tofu apply` |
-| Edit AdGuard rewrites/filters | `configs/adguard/AdGuardHome.yaml` | `configs/adguard/scripts/sync.sh` |
-| Add an Authelia OIDC client | `configs/authelia/configuration.yml` | `configs/authelia/scripts/sync.sh` |
-| Add a Caddy reverse proxy entry | `configs/gateway/Caddyfile` | `configs/gateway/scripts/sync.sh` |
-| Rotate the Coolify API token | (nothing in code) | `configs/coolify/scripts/bootstrap.sh` |
+| Add a new LXC | `network/ips.yaml` + `services/<new>/lxc.yaml` | `tofu apply` in `iac/stacks/infra` |
+| Resize/move an LXC | `services/<svc>/lxc.yaml` (`cores`, `memory_mb`, `node`, …) | `tofu apply` in `iac/stacks/infra` |
+| Add a CF tunnel route | `services/<svc>/tunnel-routes.yaml` | `tofu apply` in `iac/stacks/infra` |
+| Add a Coolify runner server | new `services/coolify-runner-NN/` + `iac/stacks/platform/runner.tf` | `tofu apply` in `iac/stacks/platform` |
+| Edit AdGuard rewrites/filters | `services/adguard/AdGuardHome.yaml.tmpl` | `services/adguard/sync.sh` |
+| Add an Authelia OIDC client | `services/gateway/authelia/configuration.yml` | `services/gateway/authelia/sync.sh` |
+| Add a Caddy reverse proxy entry | `services/gateway/caddy/Caddyfile.tmpl` | `services/gateway/caddy/sync.sh` |
+| Rotate the Coolify API token | (nothing in code) | `services/coolify/bootstrap.sh` |
 
 Both tofu stacks share `iac/.envrc` (one `source` covers both). After any of
 the above: `git add … && git commit && git push`.
@@ -80,10 +117,10 @@ Secret names used:
 | `TOFU_STATE_PASSPHRASE` | `iac/.envrc` (state encryption, both stacks) | operator (one time) |
 | `CLOUDFLARE_API_TOKEN` | infra stack: cloudflare provider + `seed-bws.sh` R2 bootstrap | operator (one time) |
 | `PVE_ROOT_PASSWORD` | infra stack: bpg/proxmox provider | operator (one time) |
-| `IEDORA_ADMIN_NAME` (shared) | `configs/coolify/scripts/bootstrap.sh` | operator (one time) |
+| `IEDORA_ADMIN_NAME` (shared) | `services/coolify/bootstrap.sh` | operator (one time) |
 | `IEDORA_ADMIN_EMAIL` (shared) | same | operator (one time) |
 | `IEDORA_ADMIN_PASSWORD` (shared with Authelia) | same | operator (one time) |
-| `COOLIFY_API_TOKEN` | platform stack: terraform_data registrations | `configs/coolify/scripts/bootstrap.sh` (rotates) |
+| `COOLIFY_API_TOKEN` | platform stack: terraform_data registrations | `services/coolify/bootstrap.sh` (rotates) |
 | `NTFY_TOPIC` | `tools/drift-check.sh` push notifications | `tools/seed-bws.sh` (random) |
 | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_ACCOUNT_ID` | `iac/.envrc` → tofu s3 backend (state in R2) | `tools/seed-bws.sh` (mints scoped CF token) |
 

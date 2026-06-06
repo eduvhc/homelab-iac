@@ -1,0 +1,15 @@
+# LXC spec for AdGuard Home (LAN DNS + split-DNS for *.iedora.com).
+# IP is NOT here — comes from network/ips.yaml keyed by this folder's name.
+# Move to a different PVE node = change `node:` only.
+
+vm_id: 102
+hostname: adguard
+cores: 1
+memory_mb: 512
+swap_mb: 256
+disk_gb: 2
+node: pve
+tags: [infra, dns]
+features:
+  nesting: false
+  keyctl: false

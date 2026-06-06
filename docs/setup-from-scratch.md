@@ -44,7 +44,7 @@ pveum user token add root@pam tofu --privsep=0
 ```
 …then paste the resulting full token (`root@pam!tofu=<uuid>`).
 
-`COOLIFY_API_TOKEN` is created later, by `tools/rebuild.sh` (Phase 5 below).
+`COOLIFY_API_TOKEN` is created later, by `tools/apply.sh` (Phase 5 below).
 
 ## Inventory snapshot
 
@@ -112,14 +112,14 @@ cp .envrc.example .envrc
 echo "<BWS_ACCESS_TOKEN>" > /root/.bws-token && chmod 600 /root/.bws-token
 ```
 
-## Phase 1-4 in one shot: `tools/rebuild.sh`
+## Phase 1-4 in one shot: `tools/apply.sh`
 
 Once Phase 0 is done and BWS is seeded, the entire rebuild is a single
 command from the ops LXC:
 
 ```bash
 cd /root/iedora-iac
-tools/rebuild.sh
+tools/apply.sh
 ```
 
 This does Phases 1 through 4 in sequence with idempotency at each step. The
@@ -157,21 +157,21 @@ for ip in 30 40 200 210; do
 done
 
 # AdGuard: install AGH binary + nftables rules
-ssh root@192.168.50.30 < configs/adguard/scripts/bootstrap.sh
-configs/adguard/scripts/sync.sh
+ssh root@192.168.50.30 < services/adguard/bootstrap.sh
+services/adguard/sync.sh
 
 # Gateway: install Caddy + Authelia, generate Authelia internal secrets +
 # OIDC RSA pair, create systemd units
-ssh root@192.168.50.40 < configs/gateway/scripts/bootstrap.sh
-configs/authelia/scripts/sync.sh
-configs/gateway/scripts/sync.sh
+ssh root@192.168.50.40 < services/gateway/bootstrap.sh
+services/gateway/authelia/sync.sh
+services/gateway/caddy/sync.sh
 
 # Coolify control plane: install Coolify, force-create root user via tinker,
 # mint "Open Tofu" API token, save COOLIFY_API_TOKEN to BWS
-configs/coolify/scripts/bootstrap.sh
+services/coolify/bootstrap.sh
 
 # Coolify runner: install Docker
-ssh root@192.168.50.210 < configs/coolify-runner/scripts/bootstrap.sh
+ssh root@192.168.50.210 < services/coolify-runner-01/bootstrap.sh
 ```
 
 After AdGuard is up, point your router's DHCP option 6 (DNS server) at
@@ -246,10 +246,10 @@ See `docs/inventory.md` for the current PVE storage layout.
 | LXC sizing / new LXC | `iac/stacks/infra/locals.tf` | `cd iac/stacks/infra && tofu apply` |
 | New CF tunnel hostname | `iac/stacks/infra/tunnel.tf` | `cd iac/stacks/infra && tofu apply` |
 | Add Coolify runner server | `iac/stacks/platform/runner.tf` | `cd iac/stacks/platform && tofu apply` |
-| AdGuard rewrites/filters | `configs/adguard/AdGuardHome.yaml` | `configs/adguard/scripts/sync.sh` |
-| Authelia OIDC client | `configs/authelia/configuration.yml` | `configs/authelia/scripts/sync.sh` |
-| Caddy reverse proxy entry | `configs/gateway/Caddyfile` | `configs/gateway/scripts/sync.sh` |
-| Rotate Coolify API token | (nothing in code) | `configs/coolify/scripts/bootstrap.sh` |
+| AdGuard rewrites/filters | `services/adguard/AdGuardHome.yaml` | `services/adguard/sync.sh` |
+| Authelia OIDC client | `services/gateway/authelia/configuration.yml` | `services/gateway/authelia/sync.sh` |
+| Caddy reverse proxy entry | `services/gateway/Caddyfile` | `services/gateway/caddy/sync.sh` |
+| Rotate Coolify API token | (nothing in code) | `services/coolify/bootstrap.sh` |
 
 ## Recovery scenarios
 
@@ -260,7 +260,7 @@ clone + `source .envrc`, both `tofu plan` calls show "No changes".
 forces a new tunnel secret, then redo Phase 3 to reinstall cloudflared with
 the new token.
 
-**Lost the Coolify API token**: re-run `configs/coolify/scripts/bootstrap.sh`
+**Lost the Coolify API token**: re-run `services/coolify/bootstrap.sh`
 — it'll skip user creation (idempotent) and mint a fresh token into BWS.
 Then `cd iac/stacks/platform && tofu apply -replace=terraform_data.coolify_runner_01`
 re-registers the runner with the new token.

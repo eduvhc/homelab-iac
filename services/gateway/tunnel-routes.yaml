@@ -1,0 +1,7 @@
+# Routes proxied via the gateway LXC (Caddy → Authelia + protected backends).
+# `host: gateway` → resolved to local.ips.gateway.
+
+- hostname: auth
+  upstream: {host: gateway, port: 80}
+- hostname: adguard
+  upstream: {host: gateway, port: 80}

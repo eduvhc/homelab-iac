@@ -1,13 +1,16 @@
 #!/bin/sh
-# Rebuild the entire iedora homelab from infra layer up.
+# Apply: converge the iedora homelab to the desired state. Idempotent — safe
+# to re-run. Use tools/destroy.sh for tear-down.
 #
-# Sequence (each phase is idempotent — re-running this is safe):
-#   1. Apply iac/stacks/infra (creates 4 LXCs + CF tunnel + DNS)
-#   2. Wait for LXCs to be SSH-reachable
-#   3. Bootstrap each service LXC (installs binaries + creates secrets)
-#   4. Install cloudflared on the Coolify LXC with the tunnel token
-#   5. Bootstrap Coolify (installs Coolify + creates root user + mints API token to BWS)
-#   6. Apply iac/stacks/platform (registers coolify-runner-01 in Coolify)
+# Sequence (each phase is idempotent):
+#   1. tofu apply iac/stacks/infra      (4 LXCs + CF tunnel + DNS)
+#   2. wait for LXCs to be SSH-reachable
+#   3. bootstrap service LXCs           (install binaries + per-service secrets)
+#   4. install cloudflared connectors on Coolify + runner (HA)
+#   5. bootstrap Coolify                (install + root user + mint API token)
+#   6. tofu apply iac/stacks/platform   (register runner in Coolify)
+#   7. trigger Coolify Docker engine validation on runner
+#   8. sync ops LXC cron jobs           (drift + token rotation)
 #
 # Pre-reqs:
 #   - All BWS secrets seeded (see tools/seed-bws.sh)
@@ -16,7 +19,7 @@
 #
 # LXC IPs are NEVER hardcoded here. After Phase 1, tools/lib/lxc-ips.sh
 # reads tofu output and exports IP_ADGUARD / IP_GATEWAY / IP_COOLIFY /
-# IP_RUNNER / ALL_LXC_IPS. Change IPs by editing iac/stacks/infra/locals.tf.
+# IP_RUNNER / ALL_LXC_IPS. Change IPs in network/ips.yaml.
 
 set -e
 
@@ -72,22 +75,16 @@ done
 step "3/6" "bootstrap service LXCs"
 
 sub "adguard ($IP_ADGUARD): install AGH binary"
-ssh root@"$IP_ADGUARD" 'sh -s' < "$REPO_ROOT/configs/adguard/scripts/bootstrap.sh"
-if [ -x "$REPO_ROOT/configs/adguard/scripts/sync.sh" ]; then
-  "$REPO_ROOT/configs/adguard/scripts/sync.sh"
-fi
+ssh root@"$IP_ADGUARD" 'sh -s' < "$REPO_ROOT/services/adguard/bootstrap.sh"
+[ -x "$REPO_ROOT/services/adguard/sync.sh" ] && "$REPO_ROOT/services/adguard/sync.sh"
 
 sub "gateway ($IP_GATEWAY): install Caddy + Authelia + generate OIDC keys"
-ssh root@"$IP_GATEWAY" 'sh -s' < "$REPO_ROOT/configs/gateway/scripts/bootstrap.sh"
-if [ -x "$REPO_ROOT/configs/authelia/scripts/sync.sh" ]; then
-  "$REPO_ROOT/configs/authelia/scripts/sync.sh"
-fi
-if [ -x "$REPO_ROOT/configs/gateway/scripts/sync.sh" ]; then
-  "$REPO_ROOT/configs/gateway/scripts/sync.sh"
-fi
+ssh root@"$IP_GATEWAY" 'sh -s' < "$REPO_ROOT/services/gateway/bootstrap.sh"
+[ -x "$REPO_ROOT/services/gateway/authelia/sync.sh" ] && "$REPO_ROOT/services/gateway/authelia/sync.sh"
+[ -x "$REPO_ROOT/services/gateway/caddy/sync.sh" ]    && "$REPO_ROOT/services/gateway/caddy/sync.sh"
 
 sub "coolify-runner-01 ($IP_RUNNER): install Docker"
-ssh root@"$IP_RUNNER" 'sh -s' < "$REPO_ROOT/configs/coolify-runner/scripts/bootstrap.sh"
+ssh root@"$IP_RUNNER" 'sh -s' < "$REPO_ROOT/services/coolify-runner-01/bootstrap.sh"
 
 # ───────────────────────────────────────────────────────────────────────────────
 step "4/6" "install cloudflared connectors (Coolify + runner replica for HA)"
@@ -98,12 +95,12 @@ TUNNEL_TOKEN=$(cd "$INFRA_DIR" && tofu output -raw tunnel_token)
 for host in "$IP_COOLIFY" "$IP_RUNNER"; do
   sub "cloudflared on $host"
   ssh root@"$host" "TUNNEL_TOKEN=$TUNNEL_TOKEN sh -s" \
-    < "$REPO_ROOT/configs/cloudflared/scripts/install.sh"
+    < "$REPO_ROOT/services/cloudflared/install.sh"
 done
 
 # ───────────────────────────────────────────────────────────────────────────────
 step "5/6" "bootstrap Coolify (install + create root user + mint API token)"
-COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/configs/coolify/scripts/bootstrap.sh"
+COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/bootstrap.sh"
 
 # ───────────────────────────────────────────────────────────────────────────────
 step "6/8" "tofu apply — stacks/platform (register runner in Coolify)"
@@ -116,7 +113,7 @@ step "7/8" "trigger Coolify's Docker engine validation on runner"
 # Coolify's API server-create endpoint runs validateConnection (SSH) but NOT
 # validateDockerEngine. Without this, is_usable stays false until you click
 # "Validate" in the UI. Kick it manually via tinker so the runner is ready
-# for deploys at end-of-rebuild.
+# for deploys at end-of-apply.
 ssh root@"$IP_COOLIFY" "docker exec coolify php artisan tinker --execute='
 \$s = App\\Models\\Server::where(\"name\", \"coolify-runner-01\")->first();
 if (\$s) { \$s->validateDockerEngine(); }
@@ -124,11 +121,11 @@ if (\$s) { \$s->validateDockerEngine(); }
 
 # ───────────────────────────────────────────────────────────────────────────────
 step "8/8" "sync ops LXC cron jobs (drift detection + token rotation)"
-# Single declarative source: configs/ops-cron/iac.cron. Copy-if-different so
+# Single declarative source: services/ops/iac.cron. Copy-if-different so
 # we don't trigger cron's "file changed" reload when nothing actually changed.
 install -d -m 0755 /etc/cron.d
-if ! cmp -s "$REPO_ROOT/configs/ops-cron/iac.cron" /etc/cron.d/iac 2>/dev/null; then
-  install -m 0644 "$REPO_ROOT/configs/ops-cron/iac.cron" /etc/cron.d/iac
+if ! cmp -s "$REPO_ROOT/services/ops/iac.cron" /etc/cron.d/iac 2>/dev/null; then
+  install -m 0644 "$REPO_ROOT/services/ops/iac.cron" /etc/cron.d/iac
   sub "installed /etc/cron.d/iac"
 else
   sub "/etc/cron.d/iac up-to-date"
@@ -140,7 +137,7 @@ for log in /var/log/iac-drift.log /var/log/coolify-token-rotation.log; do
 done
 
 # ───────────────────────────────────────────────────────────────────────────────
-printf '\n\033[1;32m✓ rebuild complete\033[0m\n'
+printf '\n\033[1;32m✓ apply complete — homelab converged to desired state\033[0m\n'
 echo "  Coolify UI:  https://coolify.iedora.com"
 echo "  Authelia UI: https://auth.iedora.com"
 echo "  AdGuard UI:  https://adguard.iedora.com (via gateway with SSO)"

@@ -1,0 +1,12 @@
+# CF tunnel routes served by this LXC. The infra stack discovers these via
+# fileset(services/*/tunnel-routes.yaml). For each entry, a DNS record +
+# ingress rule are created.
+#
+# `upstream.host` is resolved at apply time:
+#   "localhost"   → http://localhost  (same LXC as cloudflared)
+#   "<svc-name>"  → http://<IP-from-network/ips.yaml>
+
+- hostname: coolify
+  upstream:
+    host: localhost     # cloudflared runs on this LXC; Coolify listens here
+    port: 8000

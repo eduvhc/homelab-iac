@@ -11,7 +11,7 @@ resource "terraform_data" "push_pubkey_runner_01" {
   provisioner "local-exec" {
     command = <<-EOC
       KEY=$(echo '${trimspace(tls_private_key.coolify_runner_key.public_key_openssh)}')
-      ssh -o StrictHostKeyChecking=accept-new root@${local.ips.coolify_runner_01} \
+      ssh -o StrictHostKeyChecking=accept-new root@${local.ips["coolify-runner-01"]} \
         "grep -qxF \"$KEY\" /root/.ssh/authorized_keys || echo \"$KEY\" >> /root/.ssh/authorized_keys"
     EOC
   }
@@ -24,13 +24,13 @@ resource "terraform_data" "push_pubkey_runner_01" {
 resource "terraform_data" "coolify_runner_01" {
   triggers_replace = [
     tls_private_key.coolify_runner_key.private_key_pem,
-    local.ips.coolify_runner_01,
+    local.ips["coolify-runner-01"],
   ]
 
   input = {
     api_token = local.coolify_api_token
     pem       = tls_private_key.coolify_runner_key.private_key_pem
-    ip        = local.ips.coolify_runner_01
+    ip        = local.ips["coolify-runner-01"]
     api_url   = local.coolify_api_url
   }
 

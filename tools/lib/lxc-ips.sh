@@ -3,7 +3,7 @@
 #
 # Single source of truth: iac/stacks/infra/locals.tf → outputs lxc_ips + network.
 # This script reads them via tofu output and exports canonical env vars so
-# consumers never hardcode an IP. Used by tools/rebuild.sh and configs/*/sync.sh
+# consumers never hardcode an IP. Used by tools/apply.sh and configs/*/sync.sh
 # (including envsubst rendering of *.tmpl config files).
 #
 # Usage:
@@ -35,7 +35,7 @@ _get() { printf '%s' "$_infra_outputs" | jq -r ".$1.value$2"; }
 IP_ADGUARD=$(_get lxc_ips .adguard)
 IP_GATEWAY=$(_get lxc_ips .gateway)
 IP_COOLIFY=$(_get lxc_ips .coolify)
-IP_RUNNER=$( _get lxc_ips .coolify_runner_01)
+IP_RUNNER=$( _get lxc_ips '["coolify-runner-01"]')
 ALL_LXC_IPS="$IP_ADGUARD $IP_GATEWAY $IP_COOLIFY $IP_RUNNER"
 
 # Network constants.

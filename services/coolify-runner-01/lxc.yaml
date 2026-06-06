@@ -1,0 +1,15 @@
+# LXC spec for coolify-runner-01: the Docker engine where Coolify deploys
+# apps. Also runs a 2nd cloudflared connector for tunnel HA.
+# Next runners (-02, -03, ...) get their own folder + lxc.yaml.
+
+vm_id: 210
+hostname: coolify-runner-01
+cores: 2
+memory_mb: 4096
+swap_mb: 1024
+disk_gb: 30
+node: pve
+tags: [coolify, runtime]
+features:
+  nesting: true
+  keyctl: true

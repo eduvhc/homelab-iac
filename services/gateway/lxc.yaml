@@ -1,0 +1,13 @@
+# LXC spec for the gateway (Caddy + Authelia SSO).
+
+vm_id: 103
+hostname: gateway
+cores: 1
+memory_mb: 512
+swap_mb: 256
+disk_gb: 4
+node: pve
+tags: [infra, sso]
+features:
+  nesting: false
+  keyctl: false

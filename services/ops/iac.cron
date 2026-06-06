@@ -1,5 +1,5 @@
 # IaC automation cron jobs — installed at /etc/cron.d/iac on the ops LXC
-# by tools/rebuild.sh (last phase). Single source of truth; don't edit
+# by tools/apply.sh (last phase). Single source of truth; don't edit
 # /etc/cron.d/iac by hand — it gets overwritten on every rebuild.
 
 SHELL=/bin/sh
@@ -10,5 +10,5 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 30 6 * * * root /root/iedora-iac/tools/drift-check.sh >> /var/log/iac-drift.log 2>&1
 
 # Rotate Coolify API token every 25 days at 04:00 UTC (token TTL = 30d).
-# Re-mints + saves back to BWS. See configs/coolify/scripts/bootstrap.sh.
-0 4 */25 * * root /root/iedora-iac/configs/coolify/scripts/bootstrap.sh >> /var/log/coolify-token-rotation.log 2>&1
+# Re-mints + saves back to BWS. See services/coolify/bootstrap.sh.
+0 4 */25 * * root /root/iedora-iac/services/coolify/bootstrap.sh >> /var/log/coolify-token-rotation.log 2>&1

@@ -16,7 +16,7 @@ set -e
 # Auto-source iac/.envrc so bws CLI has BW_ACCESS_TOKEN etc when invoked
 # from anywhere. Path is repo-relative.
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-REPO_ROOT=${SCRIPT_DIR%/configs/*}
+REPO_ROOT=${SCRIPT_DIR%/services/*}
 if [ -f "$REPO_ROOT/iac/.envrc" ]; then
   . "$REPO_ROOT/iac/.envrc" >/dev/null 2>&1 || true
 fi
@@ -123,6 +123,6 @@ TOKEN=$(ssh root@"$HOST" \
 echo "==> minted token (${TOKEN%%|*}|...)"
 
 echo "==> saving COOLIFY_API_TOKEN to BWS"
-bws_put_or_update COOLIFY_API_TOKEN "$TOKEN" "Coolify API token (read+write), minted by configs/coolify/scripts/bootstrap.sh - rotates each run; expires after 30 days."
+bws_put_or_update COOLIFY_API_TOKEN "$TOKEN" "Coolify API token (read+write), minted by services/coolify/bootstrap.sh - rotates each run; expires after 30 days."
 
 echo "==> done."

@@ -1,0 +1,14 @@
+# LXC spec for the Coolify control plane (also runs cloudflared).
+# nesting + keyctl required for Docker inside the LXC.
+
+vm_id: 200
+hostname: coolify
+cores: 4
+memory_mb: 6144
+swap_mb: 1024
+disk_gb: 60
+node: pve
+tags: [coolify, control-plane]
+features:
+  nesting: true
+  keyctl: true
