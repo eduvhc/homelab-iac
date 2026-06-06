@@ -31,16 +31,22 @@ unset _k _v _envrc_dir
 # tf_state_passphrase + cf_api_token + r2_account_id are also consumed
 # CROSS-REPO by app-side tofu stacks (e.g. iedora/infra/tofu/r2/) — those
 # live in app repos but expect this .envrc to be sourced first.
-export TF_VAR_tf_state_passphrase="$TOFU_STATE_PASSPHRASE"
-export TF_VAR_cf_api_token="$CLOUDFLARE_API_TOKEN"
-export TF_VAR_pve_root_password="$PVE_ROOT_PASSWORD"
-export TF_VAR_coolify_api_token="$COOLIFY_API_TOKEN"
-export TF_VAR_r2_account_id="$R2_ACCOUNT_ID"
+#
+# Use ${VAR:-} (default-empty) so this file survives `set -u` even when
+# secrets are missing from sops — important during bootstrap (seed-secrets
+# runs BEFORE these vars exist) and rotation gaps (e.g. COOLIFY_API_TOKEN
+# is reactive, not bootstrap). tofu/aws will then fail with a clearer
+# downstream error than "unbound variable" from a sourced rc file.
+export TF_VAR_tf_state_passphrase="${TOFU_STATE_PASSPHRASE:-}"
+export TF_VAR_cf_api_token="${CLOUDFLARE_API_TOKEN:-}"
+export TF_VAR_pve_root_password="${PVE_ROOT_PASSWORD:-}"
+export TF_VAR_coolify_api_token="${COOLIFY_API_TOKEN:-}"
+export TF_VAR_r2_account_id="${R2_ACCOUNT_ID:-}"
 
 # ─── R2 backend for tofu state (native S3 + use_lockfile, no DynamoDB) ──────
 # The AWS_* names are what OpenTofu's s3 backend reads — they're not
 # actually AWS credentials, they're the bucket-scoped R2 token.
-export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
-export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+export AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID:-}"
+export AWS_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY:-}"
 export AWS_REGION=auto
-export AWS_ENDPOINT_URL_S3="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+export AWS_ENDPOINT_URL_S3="https://${R2_ACCOUNT_ID:-}.r2.cloudflarestorage.com"
