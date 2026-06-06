@@ -33,12 +33,15 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
+        exclude: ^tools/lib/assemble-crons/vendor/
       - id: end-of-file-fixer
+        exclude: ^tools/lib/assemble-crons/vendor/
       - id: check-yaml
-        exclude: ^configs/authelia/configuration\.yml$  # uses Go templates ({{ ... }})
+        exclude: ^services/gateway/authelia/configuration\.yml$  # uses Go templates ({{ ... }})
       - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=512]
+        exclude: ^tools/lib/assemble-crons/vendor/
 
   - repo: https://github.com/koalaman/shellcheck-precommit
     rev: v0.10.0

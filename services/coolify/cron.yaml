@@ -1,0 +1,11 @@
+# Cron entries owned by the coolify service. Assembled into /etc/cron.d/iac
+# on the ops LXC by tools/lib/assemble-crons.py (called by apply.sh phase 8).
+
+- name: coolify-rotate-token
+  schedule: "0 4 */25 * *"     # day-of-month divisible by 25, at 04:00 UTC
+  command: services/coolify/rotate-token.sh
+  log: /var/log/coolify-rotate-token.log
+  description: |
+    Idempotent — checks the current Coolify API token's expires_at and
+    only rotates if <7 days remain (TTL=30d). Cron cadence gives ~5
+    days of slack between cron firing and token expiry.

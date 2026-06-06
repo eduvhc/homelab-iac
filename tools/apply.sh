@@ -49,6 +49,18 @@ wait_ssh() {
   echo "ERROR: $ip not SSH-reachable after ${max}s"; return 1
 }
 
+# Ensure ops-LXC local deps that aren't part of the base image. Idempotent —
+# apt install on already-present packages is a no-op. Go is needed by
+# tools/lib/assemble-crons (cron file generator, phase 8/8).
+ensure_dep() {
+  bin=$1; pkg=$2
+  command -v "$bin" >/dev/null && return 0
+  echo "  installing $pkg (provides $bin)…"
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$pkg"
+}
+ensure_dep go golang-go
+
 # ───────────────────────────────────────────────────────────────────────────────
 step "1/6" "tofu apply — stacks/infra"
 cd "$INFRA_DIR"
@@ -99,9 +111,11 @@ for host in "$IP_COOLIFY" "$IP_RUNNER"; do
 done
 
 # ───────────────────────────────────────────────────────────────────────────────
-step "5/8" "bootstrap Coolify (install + create root user + mint API token)"
-# Split for SRP: install (idempotent) + bootstrap-user (idempotent) +
-# rotate-token (always rotates by design — same script used by the cron).
+step "5/8" "bootstrap Coolify (install + create root user + ensure fresh token)"
+# Split for SRP — all three idempotent:
+#   install         → no-op if Coolify is installed + API enabled
+#   bootstrap-user  → no-op if user with IEDORA_ADMIN_EMAIL exists
+#   rotate-token    → no-op if BWS holds a token valid for >7 days
 COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/install.sh"
 COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/bootstrap-user.sh"
 COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/rotate-token.sh"
@@ -124,19 +138,25 @@ if (\$s) { \$s->validateDockerEngine(); }
 ' 2>&1" | tail -3
 
 # ───────────────────────────────────────────────────────────────────────────────
-step "8/8" "sync ops LXC cron jobs (drift detection + token rotation)"
-# Single declarative source: services/ops/iac.cron. Copy-if-different so
-# we don't trigger cron's "file changed" reload when nothing actually changed.
+step "8/8" "sync ops LXC cron jobs (assembled from services/*/cron.yaml)"
+# Per-service cron declarations live in each services/<svc>/cron.yaml.
+# The assembler emits the full /etc/cron.d/iac content; we install only
+# on diff to avoid spurious cron reloads.
+TMP_CRON=$(mktemp)
+trap 'rm -f "$TMP_CRON"' EXIT
+(cd "$REPO_ROOT/tools/lib/assemble-crons" && go run . "$REPO_ROOT") > "$TMP_CRON"
+
 install -d -m 0755 /etc/cron.d
-if ! cmp -s "$REPO_ROOT/services/ops/iac.cron" /etc/cron.d/iac 2>/dev/null; then
-  install -m 0644 "$REPO_ROOT/services/ops/iac.cron" /etc/cron.d/iac
+if ! cmp -s "$TMP_CRON" /etc/cron.d/iac 2>/dev/null; then
+  install -m 0644 "$TMP_CRON" /etc/cron.d/iac
   sub "installed /etc/cron.d/iac"
 else
   sub "/etc/cron.d/iac up-to-date"
 fi
-# Ensure log targets exist with restrictive perms (cron creates them otherwise
-# as world-readable).
-for log in /var/log/iac-drift.log /var/log/coolify-token-rotation.log; do
+
+# Pre-create log files with restrictive perms (cron creates them
+# world-readable otherwise). Paths come from the assembled crontab itself.
+grep -oE '>> /var/log/[^ ]+' "$TMP_CRON" | awk '{print $2}' | sort -u | while read -r log; do
   [ -e "$log" ] || { touch "$log"; chmod 640 "$log"; }
 done
 

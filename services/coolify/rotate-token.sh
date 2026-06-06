@@ -1,14 +1,18 @@
 #!/bin/bash
-# Rotate the Coolify API token used by the platform stack: delete the
-# previous "Open Tofu" token, mint a fresh one (30-day TTL), save to BWS
-# as COOLIFY_API_TOKEN.
+# Ensure a fresh Coolify API token is in BWS. Idempotent: skips rotation if
+# the currently-stored token is valid for more than ROTATE_THRESHOLD_DAYS
+# (default 7). Forces rotation with FORCE=1.
 #
-# INTENTIONALLY NOT IDEMPOTENT: every call mints a new token by design.
-# The cron at services/ops/iac.cron runs this every 25 days; apply.sh also
-# calls it so a full apply guarantees a fresh token for the platform stack.
-# If you re-run apply.sh many times in a row, you'll create many tokens —
-# but the script always deletes the previous "Open Tofu"-named token first,
-# so there are never orphans in Coolify.
+# Decision tree on each run:
+#   • BWS has no COOLIFY_API_TOKEN          → mint
+#   • DB has no row for that token id       → mint (BWS value is stale)
+#   • days_to_expiry > ROTATE_THRESHOLD_DAYS → no-op (with status line)
+#   • else                                   → mint
+#
+# Both tools/apply.sh AND the 25-day cron (services/ops/iac.cron) call this
+# script unconditionally; the expiry check is what makes the rerun safe.
+# Coolify tokens have a 30-day TTL, so the cron's 25-day cadence + the 7-day
+# threshold means the token is refreshed with ~5 days of slack.
 #
 # Pre-reqs: install.sh + bootstrap-user.sh have run; user with email
 # IEDORA_ADMIN_EMAIL exists in Coolify.
@@ -21,6 +25,7 @@ REPO_ROOT=${SCRIPT_DIR%/services/*}
 
 HOST=${COOLIFY_HOST:-192.168.50.200}
 PROJECT=${BWS_HOMELAB_PROJECT_ID:-e0f72a13-b559-44cc-a2a7-b44b01860f39}
+THRESHOLD=${ROTATE_THRESHOLD_DAYS:-7}
 
 bws_get() {
   bws secret list --output json | jq -r --arg k "$1" '.[] | select(.key==$k) | .value'
@@ -34,6 +39,48 @@ bws_put_or_update() {
   fi
 }
 
+# ── Step 1: decide whether to rotate (each branch either exits 0 or falls
+#           through with $REASON set). ───────────────────────────────────────
+REASON=""
+
+if [ "${FORCE:-0}" = "1" ]; then
+  REASON="FORCE=1"
+else
+  CURRENT=$(bws_get COOLIFY_API_TOKEN)
+  if [ -z "$CURRENT" ] || [ "$CURRENT" = "null" ]; then
+    REASON="no COOLIFY_API_TOKEN in BWS"
+  else
+    # BWS value is "id|plainTextToken" — look up by id.
+    TOKEN_ID=${CURRENT%%|*}
+    DAYS_LEFT=$(ssh root@"$HOST" \
+      "docker exec coolify php artisan tinker --execute='\
+\$t = App\\\\Models\\\\PersonalAccessToken::find($TOKEN_ID); \
+if (!\$t) { echo \"MISSING\"; return; } \
+if (!\$t->expires_at) { echo \"NEVER\"; return; } \
+echo (int) floor(now()->diffInDays(\$t->expires_at, false));'" 2>/dev/null \
+      | grep -E '^(-?[0-9]+|MISSING|NEVER)$' | tail -1 | tr -d '\r')
+
+    case "$DAYS_LEFT" in
+      MISSING)
+        REASON="BWS holds token id=$TOKEN_ID but it doesn't exist in Coolify DB (stale)" ;;
+      NEVER)
+        echo "==> token id=$TOKEN_ID never expires — skipping rotation"
+        exit 0 ;;
+      ''|*[!0-9-]*)
+        REASON="couldn't determine expiry (got: '$DAYS_LEFT') — rotating defensively" ;;
+      *)
+        if [ "$DAYS_LEFT" -gt "$THRESHOLD" ]; then
+          echo "==> token id=$TOKEN_ID valid for $DAYS_LEFT more days (> $THRESHOLD) — no-op"
+          exit 0
+        fi
+        REASON="token id=$TOKEN_ID expires in $DAYS_LEFT day(s) (≤ $THRESHOLD)" ;;
+    esac
+  fi
+fi
+
+# ── Step 2: rotate ────────────────────────────────────────────────────────────
+echo "==> rotating Coolify API token: $REASON"
+
 ADMIN_EMAIL=$(bws_get IEDORA_ADMIN_EMAIL)
 [ -n "$ADMIN_EMAIL" ] || { echo "ERROR: IEDORA_ADMIN_EMAIL missing in BWS"; exit 1; }
 ESC_EMAIL=$(printf '%s' "$ADMIN_EMAIL" | sed "s/'/'\\\\''/g")
@@ -45,6 +92,7 @@ use App\Models\User;
 $user = User::firstWhere('email', getenv('COOLIFY_USER_EMAIL'));
 if (!$user) { echo "ERROR=no_user"; return; }
 
+// Always delete the previous "Open Tofu" token first → no orphans.
 $user->tokens()->where('name', 'Open Tofu')->delete();
 $plain = Str::random(40);
 $plainTextToken = $plain . hash('crc32b', $plain);
@@ -59,16 +107,14 @@ echo 'TOKEN=' . $tok->id . '|' . $plainTextToken . PHP_EOL;
 PHP
 )
 
-echo "==> mint new API token (previous 'Open Tofu' token is deleted)"
 TOKEN=$(ssh root@"$HOST" \
   "docker exec -e COOLIFY_USER_EMAIL='$ESC_EMAIL' \
      coolify php artisan tinker --execute=$(printf '%q' "$TINKER_CODE")" \
   | grep -oE 'TOKEN=[0-9]+\|[A-Za-z0-9]+' | sed 's/^TOKEN=//' | head -1)
 
 [ -n "$TOKEN" ] || { echo "ERROR: failed to mint Coolify API token"; exit 1; }
-echo "==> minted (${TOKEN%%|*}|…) — saving to BWS"
 
 bws_put_or_update COOLIFY_API_TOKEN "$TOKEN" \
-  "Coolify API token (read+write). Rotated by services/coolify/rotate-token.sh — expires after 30 days."
+  "Coolify API token (read+write). Managed by services/coolify/rotate-token.sh — 30-day TTL, refreshed when <7d remain."
 
-echo "==> rotated."
+echo "==> rotated → new id=${TOKEN%%|*}, expires in 30 days"

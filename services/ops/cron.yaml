@@ -1,0 +1,10 @@
+# Cron entries owned by the ops LXC itself (drift detection over both tofu
+# stacks). Assembled into /etc/cron.d/iac by tools/lib/assemble-crons.py.
+
+- name: iac-drift-check
+  schedule: "30 6 * * *"       # daily at 06:30 UTC
+  command: tools/drift-check.sh
+  log: /var/log/iac-drift.log
+  description: |
+    Daily IaC drift detection across both stacks. On drift → ntfy push
+    + log to the file above.

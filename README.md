@@ -84,9 +84,12 @@ tools/apply.sh         # idempotent: infra → bootstraps → cloudflared → pl
 
 To **tear down everything**: `tools/destroy.sh` (asks for confirmation).
 
-Cron jobs (daily drift detection + 25-day Coolify token rotation) are
-installed automatically by `apply.sh` from `services/ops/iac.cron`
-— a single declarative source. Re-running `apply.sh` reconciles them.
+Cron jobs are declared **per-service** in `services/<svc>/cron.yaml`
+(currently: `services/coolify/cron.yaml` for token rotation,
+`services/ops/cron.yaml` for drift detection). `apply.sh` runs
+`tools/lib/assemble-crons.py` to merge them into `/etc/cron.d/iac` on the
+ops LXC. Adding a new periodic task = drop a `cron.yaml` in the owning
+service's folder; nothing else to wire up.
 
 **To make changes**:
 
