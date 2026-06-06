@@ -27,7 +27,7 @@ resource "proxmox_virtual_environment_container" "lxc" {
     # without manual intervention. ignore_changes (below) prevents post-create
     # diffs from forcing replacement.
     user_account {
-      keys = [trimspace(file("/root/.ssh/id_ed25519.pub"))]
+      keys = [trimspace(file("${var.proxmox_ssh_key_path}.pub"))]
     }
   }
 
