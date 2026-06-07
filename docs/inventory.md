@@ -68,6 +68,8 @@ still plugged in physically but removed from the storage config and
 fstab. When real hardware arrives, PBS on a dedicated machine becomes the
 backup target and the HDD is retired entirely.
 
+See `docs/backups.md` for what is backed up and how to restore.
+
 
 ## LXCs as code (bpg/proxmox, data-driven from YAML)
 

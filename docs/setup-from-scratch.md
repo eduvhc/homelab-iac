@@ -297,7 +297,9 @@ state (which is now empty).
 4. `pvesm add dir backup --path /mnt/pve/backup --content backup,iso,vztmpl --is_mountpoint 1`.
 5. Confirm the daily `daily-all` vzdump job exists in `/etc/pve/jobs.cfg`.
 
-See `docs/3-node-plan.md` for the longer-term backup strategy with PBS 4.2.
+See `docs/backups.md` for the full backup strategy (what's covered,
+restore procedures, known gaps) and `docs/3-node-plan.md` for the
+longer-term PBS 4.2 migration.
 
 ## Day-2 operations
 
