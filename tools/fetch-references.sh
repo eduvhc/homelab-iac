@@ -31,9 +31,9 @@ caddy	https://github.com/caddyserver/caddy.git	master
 coolify-docs	https://github.com/coollabsio/coolify-docs.git	v4.x
 navidrome	https://github.com/navidrome/navidrome.git	master
 bbolt	https://github.com/etcd-io/bbolt.git	main
-Lidarr	https://github.com/Lidarr/Lidarr.git	develop
+Lidarr	https://github.com/Lidarr/Lidarr.git	plugins
 slskd	https://github.com/slskd/slskd.git	master
-soularr	https://github.com/mrusse/soularr.git	main
+Tubifarry	https://github.com/TypNull/Tubifarry.git	master
 ytdl-sub	https://github.com/jmbannon/ytdl-sub.git	master'
 
 # Resolve repo root relative to this script so it works from any cwd.

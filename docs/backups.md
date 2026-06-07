@@ -191,8 +191,8 @@ review before adding more LXCs or larger mount points.
                               into `music/` as renames (same FS).
 - Permissions model: host `media` group is GID 165000; inside each
   unprivileged LXC the same group is GID 65000 (subuid mapping). The
-  service users (`navidrome`, `lidarr`, `slskd`, `soularr`,
-  `ytdl-sub`) are added to the `media` group during bootstrap; the
+  service users (`navidrome`, `lidarr`, `slskd`, `ytdl-sub`) are
+  added to the `media` group during bootstrap; the
   `2775` setgid bit ensures cross-LXC writes stay group-readable.
 - SMR caveat: write-heavy *concurrent* workloads (the original vzdump
   use case) caused journal aborts. Current workload is single-writer

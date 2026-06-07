@@ -7,8 +7,8 @@
 #   slskd/catalog.db  — slskd's transfer history (re-derives on rescan but
 #                        retention is convenient)
 #
-# Soularr has no DB (it's a stateless poller). What it might leave is a log
-# file under /var/lib/soularr — not backed up.
+# Tubifarry (Lidarr plugin) has no separate DB — its state lives inside
+# lidarr/main.db (already covered above).
 
 - name: lidarr-main
   engine: sqlite

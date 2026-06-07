@@ -1,14 +1,15 @@
-# LXC spec for the music acquisition stack: Lidarr orchestrator + slskd
-# (Soulseek daemon) + soularr (Lidarr↔slskd bridge).
+# LXC spec for the music acquisition stack: Lidarr-nightly (with the
+# Tubifarry plugin acting as the slskd indexer + downloader) + slskd
+# (Soulseek daemon). Two processes, one event loop — the previous
+# polling-script bridge (soularr) was retired when Tubifarry landed.
 #
 # Auth: reverse-proxy via Authelia at lidarr.${HOMELAB_DOMAIN} (Lidarr UI)
-# and slskd.${HOMELAB_DOMAIN} (slskd UI). soularr has no UI — runs on a
-# systemd timer.
+# and slskd.${HOMELAB_DOMAIN} (slskd UI).
 #
 # Storage:
 #   rootfs (disk_gb)  → binaries, configs, SQLite DBs (Lidarr's main.db,
-#                       logs.db; slskd's catalog.db, search.db), soularr
-#                       state. Included in vzdump — all of this is small.
+#                       logs.db; slskd's catalog.db, search.db).
+#                       Included in vzdump — all of this is small.
 #   mp0 (bind mount)  → /srv/media (host) → /srv/media (in container, same
 #                       path for symmetry with download_dir + import paths).
 #                       Lidarr writes imports into /srv/media/music; slskd

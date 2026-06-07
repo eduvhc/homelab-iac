@@ -7,22 +7,22 @@ in [`backups.md`](backups.md) → `### Physical disks → sdb`.
 ## Data flow
 
 ```
- ┌──────────────────┐  watchlist   ┌──────────────────┐  Soulseek search
- │  Lidarr (105)    │ ───────────► │  soularr (105)   │ ───────┐
- │  /artists/wanted │              │  10-min timer    │        ▼
- └────────▲─────────┘              └──────────────────┘  ┌──────────────────┐
-          │                                              │  slskd (105)     │
-          │ import (rename, same FS)                     │  Soulseek peer   │
-          │                                              └────────┬─────────┘
-          │                                                       │ FLAC/MP3
-          │                                                       ▼
- ┌────────┴──────────────────────────────────────────────────────────────────┐
- │  /srv/media/_incoming  (slskd downloads)                                  │
- │  /srv/media/music      (Lidarr-managed library, FLAC preferred)           │
- │  /srv/media/youtube    (ytdl-sub-managed, daily)                          │
- └─────────────────────────────────────────▲─────────────────────────────────┘
+ ┌────────────────────────────────────┐         ┌──────────────────┐
+ │  Lidarr-nightly (105)              │ search  │  slskd (105)     │
+ │   ├─ wanted-list / artist monitor  │ ──────► │  Soulseek peer   │
+ │   └─ Tubifarry plugin              │ download└────────┬─────────┘
+ │      ├─ slskd indexer + downloader │                  │ FLAC/MP3
+ │      └─ YouTube fallback (lossy)   │ ─── YT ───┐      ▼
+ └─────────────────▲──────────────────┘           │  ┌──────────────────────────┐
+                   │ import (rename, same FS)     └─►│  /srv/media/_incoming    │
+                   │                                 │   (slskd + YT downloads) │
+                   └─────────────────────────────────┴────────────┬─────────────┘
+                                                                  │
+ ┌────────────────────────────────────────────────────────────────▼───────────┐
+ │  /srv/media/music      (Lidarr-managed library, FLAC preferred)            │
+ │  /srv/media/youtube    (ytdl-sub-managed channel subscriptions, daily)     │
+ └─────────────────────────────────────────▲──────────────────────────────────┘
                                            │ read
-                                           │
                                   ┌────────┴──────────┐
                                   │  Navidrome (104)  │
                                   │  OpenSubsonic API │
@@ -126,32 +126,69 @@ After the first `tools/apply.sh` brings up LXCs 105 and 106:
    `/var/lib/navidrome/media/youtube`. Name: `YouTube`. (Multi-library
    is web-UI-only in Navidrome — see comment in
    `services/navidrome/target/navidrome.toml.tmpl`.)
-2. **Lidarr → quality profiles + indexers.** UI at
-   `https://lidarr.${HOMELAB_DOMAIN}`. Authelia gates access. Set up a
-   FLAC-preferred quality profile and add the soularr-managed slskd
-   indexer (URL `http://127.0.0.1:5030`, API key from
-   `/etc/lidarr-stack/secrets.env` on the LXC).
-3. **slskd → Soulseek folder shares.** UI at
+2. **Lidarr → install Tubifarry plugin.** UI at
+   `https://lidarr.${HOMELAB_DOMAIN}` (Authelia gates access). Go to
+   `System → Plugins`, paste `https://github.com/TypNull/Tubifarry`,
+   click Install, then restart Lidarr from `System → General`. Plugin
+   updates are NOT automatic — re-check periodically.
+3. **Lidarr → configure Tubifarry → slskd indexer + downloader.** In
+   the Tubifarry settings pane: add slskd at `http://127.0.0.1:5030`
+   with the API key from `/etc/lidarr-stack/secrets.env` on the LXC
+   (`cat` it via SSH; the key never leaves the LXC). Enable both as
+   indexer and download client.
+4. **Lidarr → quality profile.** Create a FLAC-preferred profile
+   (FLAC > MP3 320 > MP3 V0 > AAC). This is what Tubifarry honors when
+   choosing between Soulseek hits and YouTube fallback (Soulseek tends
+   to have FLAC; YouTube is AAC 128/256).
+5. **slskd → Soulseek folder shares (optional sanity check).** UI at
    `https://slskd.${HOMELAB_DOMAIN}`. Verify the share roots match
-   `services/lidarr/target/slskd.yml.tmpl → shares.directories`.
-4. **ytdl-sub → subscriptions.** Edit
+   `services/lidarr/target/slskd.yml.tmpl → shares.directories` and
+   that login to Soulseek succeeded.
+6. **ytdl-sub → subscriptions.** Edit
    `services/ytdl-sub/target/subscriptions.yaml` with the channels /
-   playlists / artists you want. Run `tools/apply.sh` to sync. First
-   sync runs at next 04:00 (or manually:
-   `ssh root@<ytdl-sub-ip> systemctl start ytdl-sub.service`).
+   playlists you want (NTS Radio, KEXP sessions, etc — channel-style
+   YouTube content that Lidarr's discography model doesn't cover).
+   Run `tools/apply.sh` to sync. First sync runs at next 04:00 (or
+   manually: `ssh root@<ytdl-sub-ip> systemctl start ytdl-sub.service`).
+
+### Why Tubifarry instead of soularr
+
+Earlier iteration of the stack used `mrusse/soularr` — a Python script
+that polled Lidarr's wanted list every 10min, searched slskd, and
+told Lidarr to import. It worked but was an out-of-process moving
+part with its own systemd timer, config, and version drift.
+
+Tubifarry runs **inside** Lidarr as a plugin, on the same event loop
+Lidarr already uses for indexers and download clients. Same Soulseek
+source, fewer moving parts. Cost: Lidarr must run on the `nightly`
+branch (the only branch with plugin support today). The DB schema is
+one-way — once on nightly, rolling back to master requires a pre-
+switch DB backup. We keep nightly SQLite backups, so this is
+recoverable but worth noting before flipping branches manually.
+
+Bonus: Tubifarry adds a YouTube fallback inside Lidarr itself — when
+an album has no Soulseek match, it can try YouTube. Default is "no
+re-encode" (yt-dlp's original Opus ~160k webm); configurable to
+AAC/MP3/Opus VBR or Vorbis 224 kbps (see
+`references/Tubifarry/Tubifarry/Download/Clients/YouTube/YoutubeProviderSettings.cs`
+→ `ReEncodeOptions` enum). All lossy regardless. That
+overlaps with ytdl-sub's YouTube capability but the two have
+different jobs: Tubifarry fills missing albums in a Lidarr-managed
+discography; ytdl-sub subscribes to continuously-updating channels.
 
 ## Where secrets live
 
 | Secret | Source | Consumer |
 |---|---|---|
 | `SOULSEEK_USERNAME` / `SOULSEEK_PASSWORD` | `iac/secrets.sops.yaml` (user-set) | slskd via envsubst into `slskd.yml` |
-| `LIDARR_API_KEY` | `random_secrets` directive (LXC 105 local) | Lidarr config.xml + soularr ExecStartPre |
-| `SLSKD_API_KEY` / `SLSKD_JWT_KEY` | `random_secrets` directive (LXC 105 local) | slskd EnvironmentFile + soularr ExecStartPre |
+| `LIDARR_API_KEY` | `random_secrets` directive (LXC 105 local) | Lidarr config.xml |
+| `SLSKD_API_KEY` / `SLSKD_JWT_KEY` | `random_secrets` directive (LXC 105 local) | slskd EnvironmentFile + Tubifarry config (entered manually in Lidarr UI) |
 
-The two soularr-consumed API keys never leave LXC 105 — they're
-generated by the bootstrap engine inside the LXC's
+The Lidarr + slskd API keys never leave LXC 105 — they're generated
+by the bootstrap engine inside the LXC's
 `/etc/lidarr-stack/secrets.env` and read at runtime via systemd
-`EnvironmentFile=`.
+`EnvironmentFile=`. The slskd API key is entered once in the Lidarr
+UI when configuring Tubifarry (step 3 above).
 
 ## Backups
 
@@ -159,10 +196,10 @@ Reproducible (re-acquirable) data — media files — are NOT backed up.
 What's backed up via `services/lidarr/backups.yaml` (SQLite engine,
 same pattern as Navidrome / Authelia):
 
-- `lidarr.db` — artists, albums, wanted list, quality profiles
+- `lidarr.db` — artists, albums, wanted list, quality profiles,
+                **plugin install state** (Tubifarry registration)
 - `logs.db`  — operational history
 - `catalog.db` — slskd transfer history
 
-Soularr is stateless (a poller) — no backup target.
 ytdl-sub state derives from `subscriptions.yaml` (in git) + already-
 downloaded files (on disk) — no backup target.

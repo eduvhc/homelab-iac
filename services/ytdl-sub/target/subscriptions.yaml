@@ -1,40 +1,52 @@
 # ytdl-sub subscriptions — the only "UI" of this service.
 #
-# Each top-level key under a preset is one subscription. Edit + commit +
-# `tools/apply.sh` (which calls sync_service ytdl-sub) to roll out.
+# Schema validated against references/ytdl-sub/examples/music_subscriptions.yaml.
+# Top-level keys are prebuilt preset NAMES (shipped with ytdl-sub); under
+# each, `= Genre:` blocks define a genre tag; under each genre, the entries
+# are `"Display Name": "URL"` pairs.
 #
-# Library layout:
-#   /srv/media/youtube/<Channel or Playlist Name>/
-#       <track>.<ext>            (mp3 by default; flac if source allows)
-#       <track>.nfo              (Kodi/Jellyfin metadata, harmless for Navidrome)
-#       cover.jpg                (album art from channel/playlist thumbnail)
+# Output layout (per the preset comments at the top of the source example):
 #
-# Presets reference: https://ytdl-sub.readthedocs.io/en/latest/presets.html
+#   music_directory/
+#     <Artist>/
+#       [YYYY] <Album>/
+#         01 - Track.mp3
+#         folder.jpg
+#
+# Edit + commit + `tools/apply.sh` (which calls sync_service ytdl-sub) to
+# roll out. Next timer fire (04:00) picks it up.
+#
+# Prebuilt presets available (see references/ytdl-sub/src/ytdl_sub/
+# prebuilt_presets/music/):
+#   "YouTube Releases"       — channels with a /releases tab, or playlists
+#                              of singles (each video = one track)
+#   "YouTube Full Albums"    — playlists / videos where one video = a full
+#                              album (split via video chapters → tracks)
+#   "SoundCloud Discography" — SoundCloud artist URL
+#   "Bandcamp"               — Bandcamp artist URL
+#
+# Drop the music_directory into /srv/media/youtube (the host-shared
+# bind-mount). Navidrome's "YouTube" library (manually added via UI on
+# first deploy) points at /var/lib/navidrome/media/youtube → same files.
 
 __preset__:
-  # Drop into Navidrome's "YouTube" library (created via UI in Settings →
-  # Libraries pointing at /var/lib/navidrome/media/youtube). Output paths
-  # are absolute on this LXC; they resolve to /srv/media/youtube on the
-  # shared bind-mount.
   overrides:
     music_directory: "/srv/media/youtube"
-
-# ── Soundcloud-style channel/playlist sync — single track per video ─────────
-"Yt Music Playlist":
-  preset:
-    - "Yt Music Playlist"
-  overrides:
-    music_directory: "/srv/media/youtube"
-  # Example subscriptions — replace with your own. Format:
-  #   "<Display name>":
-  #     url: "<playlist or channel URL>"
-  # See https://ytdl-sub.readthedocs.io/en/latest/prebuilt_presets/music.html
-  # for the supported variables.
 
 # Example (commented — uncomment + edit when ready):
-# "NTS Radio Mixes":
-#   preset:
-#     - "Yt Music Playlist"
-#   overrides:
-#     music_directory: "/srv/media/youtube"
-#   url: "https://www.youtube.com/@NTSRadioMixes"
+#
+# YouTube Releases:
+#   = Jazz:
+#     "Thelonious Monk": "https://www.youtube.com/@theloniousmonk3870/releases"
+#
+# YouTube Full Albums:
+#   = Lofi:
+#     "Game Chops": "https://www.youtube.com/playlist?list=PLBsm_SagFMmdWnCnrNtLjA9kzfrRkto4i"
+#
+# SoundCloud Discography:
+#   = Electronic:
+#     "French79": "https://soundcloud.com/french79music"
+#
+# Bandcamp:
+#   = Lofi:
+#     "Emily Hopkins": "https://emilyharpist.bandcamp.com/"

@@ -1,13 +1,15 @@
-# slskd configuration. Rendered by the sync engine via envsubst.
+# slskd configuration. Rendered by the sync engine via envsubst, then
+# slskd itself expands ${SLSKD_API_KEY} at boot from EnvironmentFile=
+# (separate substitution pass — central sops keys are baked in by the
+# sync engine, LXC-local random secrets stay in the LXC).
 #
-# Whitelisted envsubst vars (declared in services/lidarr/sync.yaml):
-#   ${IP_GATEWAY}                 — only IP allowed to be the reverse-proxy
-#   ${SOULSEEK_USERNAME}          — from iac/secrets.sops.yaml (user-set)
-#   ${SOULSEEK_PASSWORD}          — from iac/secrets.sops.yaml (user-set)
+# Sync-engine envsubst (services/lidarr/sync.yaml → envsubst:):
+#   ${SOULSEEK_USERNAME}, ${SOULSEEK_PASSWORD}  — central sops, user-set
 #
-# Per-LXC random secrets (NOT envsubst'd here — resolved by slskd at boot
-# via its own ${VAR} expansion against the EnvironmentFile=):
-#   ${SLSKD_API_KEY}, ${SLSKD_JWT_KEY}
+# Resolved by slskd at boot (NOT by the sync engine):
+#   ${SLSKD_API_KEY}                             — random_secrets, LXC-local
+#
+# Schema validated against references/slskd/config/slskd.example.yml.
 
 soulseek:
   username: ${SOULSEEK_USERNAME}
@@ -25,30 +27,24 @@ directories:
   incomplete: /var/lib/slskd/incomplete
   downloads: /srv/media/_incoming
 
-global:
-  upload:
-    speed_limit: 0   # kB/s; 0 = unlimited
-  download:
-    speed_limit: 0
+# Transfers: relying on slskd defaults (upload.slots=20, download.slots=500,
+# download.retry.attempts=3). See references/slskd/config/slskd.example.yml
+# lines 57–82 if tuning is ever needed.
 
 web:
   port: 5030
   url_base: /
   authentication:
-    # Auth delegated to Authelia at the gateway. slskd's own login is
-    # disabled — the LXC is unreachable from the LAN except via Caddy's
-    # forward_auth, and from soularr (localhost API key auth).
+    # Web UI auth delegated to Authelia at the gateway. slskd's own
+    # username/password login is disabled — the LXC is unreachable from
+    # the LAN except via Caddy's forward_auth. API key auth (used by
+    # Tubifarry from localhost) stays active even when disabled=true.
     disabled: true
     api_keys:
-      soularr_key:
+      tubifarry_key:
         key: ${SLSKD_API_KEY}
         role: readwrite
         cidr: 127.0.0.1/32
 
-logger:
-  loki:
-    enabled: false
-
 flags:
   no_logo: true
-  no_start_check: false

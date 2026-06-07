@@ -13,7 +13,7 @@ Single source of truth for what runs where. Keep in sync with PVE tags
 | 200 | coolify             | 192.168.50.200    | coolify, control-plane | Coolify UI + cloudflared (CF tunnel terminator) |
 | 210 | coolify-runner-01   | 192.168.50.210    | coolify, runtime     | Docker engine + Traefik for apps deployed via Coolify |
 | 104 | navidrome           | 192.168.50.220    | media, music         | Navidrome music server (OpenSubsonic). rootfs (state) + bind-mount of `/srv/media` from host for the library. |
-| 105 | lidarr              | 192.168.50.221    | media, music, arr    | Lidarr + slskd (Soulseek) + soularr bridge. Acquires FLAC into `/srv/media/music`. |
+| 105 | lidarr              | 192.168.50.221    | media, music, arr    | Lidarr-nightly + slskd (Soulseek). Acquisition via Tubifarry plugin (installed via Lidarr UI) → slskd + YouTube fallback. FLAC into `/srv/media/music`. |
 | 106 | ytdl-sub            | 192.168.50.222    | media, music         | ytdl-sub daily sync into `/srv/media/youtube`. No UI — config is `target/subscriptions.yaml`. |
 
 ## Tag schema

@@ -132,7 +132,7 @@ log_info "navidrome ($IP_NAVIDROME): bootstrap"
 bootstrap_service navidrome "$IP_NAVIDROME"
 sync_service navidrome
 
-log_info "lidarr ($IP_LIDARR): bootstrap (Lidarr + slskd + soularr)"
+log_info "lidarr ($IP_LIDARR): bootstrap (Lidarr-nightly + Tubifarry + slskd)"
 bootstrap_service lidarr "$IP_LIDARR"
 # sync needs SOULSEEK_USERNAME / SOULSEEK_PASSWORD in env (from sops via
 # source_envrc) for slskd.yml envsubst. The sync engine will fail loudly
