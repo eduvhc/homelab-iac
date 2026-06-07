@@ -9,6 +9,10 @@
 #   • days_to_expiry > ROTATE_THRESHOLD_DAYS     → no-op (with status line)
 #   • else                                        → mint
 #
+# The PHP runs in the coolify container (lives in target/*.php):
+#   - target/check-token-expiry.php   read-only check (days_to_expiry)
+#   - target/rotate-token.php         mint new token
+#
 # Pre-reqs: install.sh + bootstrap-user.sh have run; SOPS+age available.
 # After rotation the script ALSO updates the in-memory $COOLIFY_API_TOKEN
 # env var so the running session sees the new value. To persist for other
@@ -18,15 +22,24 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/../../tools/lib/core/common.sh"
+. "$SCRIPT_DIR/../../../tools/lib/core/common.sh"
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/../../tools/lib/secrets/sops.sh"
+. "$SCRIPT_DIR/../../../tools/lib/secrets/sops.sh"
 
 source_envrc
 require_cmd sops jq ssh
 
 HOST=${COOLIFY_HOST:-192.168.50.200}
 THRESHOLD=${ROTATE_THRESHOLD_DAYS:-7}
+TARGET_DIR="$SCRIPT_DIR/../target"
+
+# tinker_exec PHP_FILE [docker -e flags...]   — run a target/*.php in the
+# coolify container; returns its raw stdout.
+tinker_exec() {
+  _php=$1; shift
+  ssh root@"$HOST" \
+    "docker exec $* coolify php artisan tinker --execute=$(printf '%q' "$(cat "$_php")")"
+}
 
 # ── Step 1: decide whether to rotate ─────────────────────────────────────────
 REASON=""
@@ -38,18 +51,12 @@ else
   if [ -z "$CURRENT" ]; then
     REASON="no COOLIFY_API_TOKEN in iac/secrets.sops.yaml"
   else
-    # Stored value is "id|plainTextToken" — look up by id.
     TOKEN_ID=${CURRENT%%|*}
-    # The tinker pipeline can return empty when Coolify is still booting,
-    # when artisan prints non-matching warnings, or when grep finds nothing
-    # — `|| true` keeps `set -e + pipefail` from killing the whole apply.
-    # The case below treats empty as "couldn't determine → rotate defensively".
-    DAYS_LEFT=$({ ssh root@"$HOST" \
-      "docker exec coolify php artisan tinker --execute='\
-\$t = App\\\\Models\\\\PersonalAccessToken::find($TOKEN_ID); \
-if (!\$t) { echo \"MISSING\"; return; } \
-if (!\$t->expires_at) { echo \"NEVER\"; return; } \
-echo (int) floor(now()->diffInDays(\$t->expires_at, false));'" 2>/dev/null \
+    # `|| true` so set -e + pipefail don't kill the apply on transient empty
+    # output (Coolify booting, artisan warnings, etc.). The case below
+    # treats empty as "couldn't determine → rotate defensively".
+    DAYS_LEFT=$({ tinker_exec "$TARGET_DIR/check-token-expiry.php" \
+      "-e COOLIFY_TOKEN_ID='$TOKEN_ID'" 2>/dev/null \
       | grep -E '^(-?[0-9]+|MISSING|NEVER)$' | tail -1 | tr -d '\r'; } || true)
 
     case "$DAYS_LEFT" in
@@ -69,34 +76,9 @@ fi
 # ── Step 2: rotate ───────────────────────────────────────────────────────────
 log_info "rotating Coolify API token: $REASON"
 
-ADMIN_EMAIL=${HOMELAB_ADMIN_EMAIL:?must be in iac/secrets.sops.yaml}
-ESC_EMAIL=$(printf '%s' "$ADMIN_EMAIL" | sed "s/'/'\\\\''/g")
+ESC_EMAIL=$(printf '%s' "${HOMELAB_ADMIN_EMAIL:?}" | sed "s/'/'\\\\''/g")
 
-TINKER_CODE=$(cat <<'PHP'
-use Illuminate\Support\Str;
-use App\Models\User;
-
-$user = User::firstWhere('email', getenv('COOLIFY_USER_EMAIL'));
-if (!$user) { echo "ERROR=no_user"; return; }
-
-// Always delete the previous "Open Tofu" token first → no orphans.
-$user->tokens()->where('name', 'Open Tofu')->delete();
-$plain = Str::random(40);
-$plainTextToken = $plain . hash('crc32b', $plain);
-$tok = $user->tokens()->create([
-    'name' => 'Open Tofu',
-    'token' => hash('sha256', $plainTextToken),
-    'abilities' => ['read', 'write', 'deploy'],
-    'expires_at' => now()->addDays(30),
-    'team_id' => 0,
-]);
-echo 'TOKEN=' . $tok->id . '|' . $plainTextToken . PHP_EOL;
-PHP
-)
-
-TOKEN=$(ssh root@"$HOST" \
-  "docker exec -e COOLIFY_USER_EMAIL='$ESC_EMAIL' \
-     coolify php artisan tinker --execute=$(printf '%q' "$TINKER_CODE")" \
+TOKEN=$(tinker_exec "$TARGET_DIR/rotate-token.php" "-e COOLIFY_USER_EMAIL='$ESC_EMAIL'" \
   | grep -oE 'TOKEN=[0-9]+\|[A-Za-z0-9]+' | sed 's/^TOKEN=//' | head -1)
 
 [ -n "$TOKEN" ] || die "failed to mint Coolify API token"
