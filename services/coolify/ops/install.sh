@@ -10,7 +10,7 @@ set -eu
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/../../tools/lib/core/common.sh"
+. "$SCRIPT_DIR/../../../tools/lib/core/common.sh"
 
 require_cmd ssh
 
