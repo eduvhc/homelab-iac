@@ -135,18 +135,21 @@ ls -lh /mnt/pve/backup/dump/vzdump-lxc-104-*.tar.zst
 
 Quick reference of what every LXC contributes to the backup story:
 
-| LXC                   | Inner backup script                                | Engine     | What it captures                       |
+| LXC                   | Inner backup spec                                  | Engine     | What it captures                       |
 |---|---|---|---|
-| coolify (200)         | `services/coolify/backup-postgres.sh`              | pg_dump    | Coolify source DB (projects, deploys)  |
-| gateway (103)         | `services/gateway/authelia/backup-sqlite.sh`       | sqlite3    | Authelia DB (TOTP, sessions, audit)    |
-| navidrome (104)       | `services/navidrome/backup-sqlite.sh`              | sqlite3    | Navidrome DB (users, ratings, scrobbles) |
+| coolify (200)         | `services/coolify/backups.yaml`                    | postgres   | Coolify source DB (projects, deploys)  |
+| gateway (103)         | `services/gateway/backups.yaml`                    | sqlite     | Authelia DB (TOTP, sessions, audit)    |
+| navidrome (104)       | `services/navidrome/backups.yaml`                  | sqlite     | Navidrome DB (users, ratings, scrobbles) |
 | adguard (102)         | —                                                  | —          | BoltDB + flock blocks online dump; vzdump only (see below) |
 | coolify-runner-01 (210) | —                                                | —          | Pure Docker host; per-app future       |
 | ops (101)             | —                                                  | —          | Rootfs covered by vzdump               |
 
-All scripts run from ops at 02:50 UTC and write to the target LXC's
-rootfs so the 03:00 vzdump captures them. Add a new service = add a new
-row. Per-service details follow.
+Backups are **declarative**: `services/<svc>/backups.yaml` is the spec,
+`tools/lib/assemble-crons` translates it into cron entries that invoke
+`tools/lib/backups/run.sh`. No per-service shell script — adding a new
+backup is editing one YAML file. All entries run at 02:50 UTC (10 min
+before vzdump's 03:00) and write to the target LXC's rootfs so the host
+snapshot captures them.
 
 ## Per-service exceptions
 
@@ -330,7 +333,7 @@ in your password manager — see "Restore secrets").
 
 No inner backup script for ops itself.
 
-## Inner backup pattern (`tools/backups/`)
+## Inner backup pattern (`tools/lib/backups/`)
 
 "Inner" backups = per-app database dumps (pg_dump, sqlite3 .backup, …)
 that complement the host-level vzdump snapshot. Triggered by cron from
@@ -340,20 +343,50 @@ captures the dump alongside the rest of the LXC.
 ### Layout
 
 ```
-tools/backups/
-└── lib/
-    ├── postgres.sh        pg_dump_in_container HOST CONTAINER USER DB DEST_DIR LABEL
-    └── retention.sh       rotate_keep_last HOST DIR PATTERN KEEP
+tools/lib/backups/
+├── run.sh                  driver — dispatched by cron; --engine X ...
+├── postgres.sh             pg_dump_in_container helper
+├── sqlite.sh               sqlite_backup_remote helper (+ integrity_check)
+└── retention.sh            rotate_keep_last helper
 
 services/<svc>/
-├── backup-<engine>.sh     thin orchestrator — sources lib, supplies args
-└── cron.yaml              schedules it (10 min before vzdump's 03:00)
+└── backups.yaml            declarative spec (list of backup entries)
+
+tools/lib/assemble-crons    Go program that reads each backups.yaml +
+                            cron.yaml and emits /etc/cron.d/iac
 ```
 
-Engine helpers under `tools/backups/lib/` are reusable across services
-(any Postgres-backed service uses the same `postgres.sh`). The
-per-service script knows host + container + DB + destination; the lib
-does the work.
+The flow: assemble-crons reads `services/*/backups.yaml`, validates each
+spec against its engine schema, and emits a cron entry per backup that
+calls `tools/lib/backups/run.sh` with `--engine X --name Y …` flags.
+At cron time, `run.sh` parses its own flags, dispatches to the right
+engine helper, and rotates the dest dir.
+
+### Backup spec schema (`services/<svc>/backups.yaml`)
+
+```yaml
+- name: <unique-identifier>     # cron entry name; dump filename prefix; log filename
+  engine: postgres|sqlite       # dispatcher key
+  host: <service-name>          # resolved via ip_of from network/ips.yaml
+  dest_dir: /absolute/path      # on the target host (vzdump captures it)
+  retention:                    # vocabulary aligns with PVE vzdump prune-backups
+    keep_last: <int>            # mandatory: keep the N most recent dumps
+    # keep_daily: <int>         # future: 1 per day for N days
+    # keep_weekly: <int>        # future: 1 per week for N weeks
+  schedule: "50 2 * * *"        # cron expression, UTC
+
+  # postgres-specific:
+  container: <docker-name>
+  user: <postgres-user>
+  database: <db-name>
+
+  # sqlite-specific:
+  src: /absolute/path/to/file.db
+```
+
+Dump file naming convention:
+- `<dest_dir>/<name>-<UTC-ts>.dmp` (postgres, pg_dump custom format)
+- `<dest_dir>/<name>-<UTC-ts>.sqlite3` (sqlite)
 
 ### Why not the app's own scheduler?
 

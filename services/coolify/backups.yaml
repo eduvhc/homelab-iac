@@ -1,0 +1,29 @@
+# Declarative backup specs for the coolify LXC. Read by
+# tools/lib/assemble-crons (Go); turned into /etc/cron.d/iac entries that
+# invoke tools/lib/backups/run.sh on schedule.
+#
+# Schema (per entry):
+#   name       unique identifier (becomes cron entry name + log filename
+#              + dump file prefix on the target host)
+#   engine     postgres | sqlite                  (dispatcher key)
+#   host       service name from network/ips.yaml (resolved by ip_of)
+#   dest_dir   absolute path on the target host where dumps land
+#   schedule   cron expression (5 fields, UTC)
+#   retention  nested block — same vocabulary as PVE vzdump's prune-backups:
+#              `keep_last` (count), future `keep_daily`, `keep_weekly`,
+#              `keep_monthly`, etc. Currently only `keep_last` is wired.
+#
+# Engine-specific fields (validated by assemble-crons):
+#   postgres:  container, user, database
+#   sqlite:    src   (absolute path to the .db / .sqlite3 file)
+
+- name: coolify-source
+  engine: postgres
+  host: coolify
+  container: coolify-db
+  user: coolify
+  database: coolify
+  dest_dir: /data/coolify/backups/source
+  retention:
+    keep_last: 14
+  schedule: "50 2 * * *"       # 10 min before vzdump's 03:00

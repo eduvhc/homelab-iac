@@ -1,0 +1,11 @@
+# Backup specs for the gateway LXC (Caddy + Authelia). See
+# services/coolify/backups.yaml for the schema.
+
+- name: authelia
+  engine: sqlite
+  host: gateway
+  src: /var/lib/authelia/db.sqlite3
+  dest_dir: /var/lib/authelia/backups
+  retention:
+    keep_last: 14
+  schedule: "50 2 * * *"

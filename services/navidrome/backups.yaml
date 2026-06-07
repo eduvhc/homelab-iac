@@ -1,0 +1,11 @@
+# Backup specs for the navidrome LXC. See services/coolify/backups.yaml
+# for the schema.
+
+- name: navidrome
+  engine: sqlite
+  host: navidrome
+  src: /var/lib/navidrome/navidrome.db
+  dest_dir: /var/lib/navidrome/backups
+  retention:
+    keep_last: 14
+  schedule: "50 2 * * *"
