@@ -120,9 +120,9 @@ sync_service adguard
 
 log_info "gateway ($IP_GATEWAY): bootstrap (Caddy + Authelia + secrets + RSA pair)"
 bootstrap_service gateway "$IP_GATEWAY"
-# authelia/ops/sync.sh is hybrid: argon2id hash logic in shell, file
-# render+push delegated to the sync engine via authelia/sync.yaml.
-[ -x "$REPO_ROOT/services/gateway/authelia/ops/sync.sh" ] && "$REPO_ROOT/services/gateway/authelia/ops/sync.sh"
+# Authelia: argon2id hash regen is a typed pre_run hook in the sync engine
+# (see authelia/sync.yaml). No shell wrapper needed.
+sync_service gateway/authelia
 sync_service gateway/caddy
 
 log_info "coolify-runner-01 ($IP_RUNNER): bootstrap (Docker)"

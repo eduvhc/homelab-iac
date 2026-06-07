@@ -33,6 +33,7 @@ import (
 // Config is the schema for services/<svc>/sync.yaml.
 type Config struct {
 	Host         string    `yaml:"host"`
+	PreRun       []Hook    `yaml:"pre_run,omitempty"`
 	Files        []File    `yaml:"files"`
 	VerifyActive StrOrList `yaml:"verify_active,omitempty"`
 }
@@ -111,6 +112,14 @@ func Run(cfg Config, svcDir, svcName string) error {
 	target, err := resolveTarget(cfg.Host)
 	if err != nil {
 		return err
+	}
+
+	// ── pre_run hooks (e.g. argon2id_hash) — may mutate sops + export env
+	// vars consumed by files[].envsubst below.
+	for i, h := range cfg.PreRun {
+		if err := runHook(h, target); err != nil {
+			return fmt.Errorf("pre_run[%d] (type=%s): %w", i, h.Type, err)
+		}
 	}
 
 	tmpDir, err := os.MkdirTemp("", "sync-"+svcName+"-")

@@ -1,15 +1,27 @@
-# Render+push spec for Authelia. The argon2id password-hash management
-# (regenerate-if-source-password-changed) stays in services/gateway/authelia/ops/sync.sh
-# because it has conditional logic + mutates sops — not expressible as
-# declarative YAML without bespoke directives. That script exports
-# HOMELAB_ADMIN_PWHASH and then dispatches to the sync engine against
-# this manifest.
+# Render+push spec for Authelia. The previously-shell-only argon2id
+# password hash management is now a typed pre_run hook handled by the
+# Go engine — no shell wrapper needed.
 #
-# Both files use atomic_push because Authelia watches the directory
-# (configuration.yml.tmpl sets `authentication_backend.file.watch: true`)
-# — readers must never see a truncated mid-scp state.
+# The two config files use atomic_push because Authelia watches the
+# directory (configuration.yml.tmpl sets
+# `authentication_backend.file.watch: true`) — readers must never see a
+# truncated mid-scp state.
 
 host: gateway
+
+# Regenerate the argon2id hash of HOMELAB_ADMIN_PASSWORD on the gateway
+# (where the authelia binary lives) only when the source password
+# changed. Hash + sha256 marker are persisted to sops; the freshly
+# exported HOMELAB_ADMIN_PWHASH env var feeds the users_database.yml.tmpl
+# envsubst below. argon2id is non-deterministic, so the marker is what
+# prevents spurious sops drift on every apply.
+pre_run:
+  - type: argon2id_hash
+    source_env: HOMELAB_ADMIN_PASSWORD
+    target_sops_key: HOMELAB_ADMIN_PWHASH
+    marker_sops_key: HOMELAB_ADMIN_PWHASH_SRC
+    remote_command: "authelia crypto hash generate argon2 --password '{password}'"
+    output_match: "^Digest: (.+)$"
 
 files:
   - src: target/configuration.yml.tmpl
