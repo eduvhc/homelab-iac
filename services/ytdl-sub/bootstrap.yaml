@@ -35,13 +35,19 @@ dirs:
   # — that would re-set host ownership.
 
 commands:
-  # uv (Astral) install — same pattern as services/lidarr/bootstrap.yaml.
-  # The official curl|sh installer writes to /root/.local/bin; we symlink
-  # to /usr/local/bin so the ytdl-sub user can call it.
+  # uv (Astral) install — single binary, system-wide in /usr/local/bin.
+  # NOT via the official curl|sh installer because that writes to
+  # /root/.local/bin/, and the ytdl-sub user (su'd below) can't traverse
+  # /root/ (mode 700) to reach the symlink target. Pulling the asset
+  # directly side-steps the whole HOME-dance.
   - if_missing_file: /usr/local/bin/uv
     shell: |
-      curl -LsSf https://astral.sh/uv/install.sh | sh
-      ln -sf /root/.local/bin/uv /usr/local/bin/uv
+      _tag=$(curl -fsSL 'https://api.github.com/repos/astral-sh/uv/releases/latest' | jq -r .tag_name)
+      curl -fsSL "https://github.com/astral-sh/uv/releases/download/${_tag}/uv-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/uv.tar.gz
+      tar -xzf /tmp/uv.tar.gz -C /tmp
+      install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv  /usr/local/bin/uv
+      install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uvx /usr/local/bin/uvx
+      rm -rf /tmp/uv.tar.gz /tmp/uv-x86_64-unknown-linux-gnu
 
   # ytdl-sub via uv tool install — managed isolated venv under
   # /var/lib/ytdl-sub/.local. The shim at /var/lib/ytdl-sub/.local/bin
