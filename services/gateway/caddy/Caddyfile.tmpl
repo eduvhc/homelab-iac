@@ -47,3 +47,13 @@ adguard.${HOMELAB_DOMAIN}:80 {
     import authelia
     reverse_proxy http://${IP_ADGUARD}:3000
 }
+
+# Navidrome (music server) - protected by reverse-proxy auth.
+# Authelia's Remote-User header reaches Navidrome via the forward_auth
+# response copy_headers in the (authelia) snippet. Navidrome trusts only
+# the gateway IP (see services/navidrome/navidrome.toml.tmpl
+# → ReverseProxyWhitelist).
+music.${HOMELAB_DOMAIN}:80 {
+    import authelia
+    reverse_proxy http://${IP_NAVIDROME}:4533
+}

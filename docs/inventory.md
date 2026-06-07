@@ -12,6 +12,7 @@ Single source of truth for what runs where. Keep in sync with PVE tags
 | 103 | gateway             | 192.168.50.40     | infra, sso           | Caddy + Authelia (SSO for homelab admin UIs) |
 | 200 | coolify             | 192.168.50.200    | coolify, control-plane | Coolify UI + cloudflared (CF tunnel terminator) |
 | 210 | coolify-runner-01   | 192.168.50.210    | coolify, runtime     | Docker engine + Traefik for apps deployed via Coolify |
+| 104 | navidrome           | 192.168.50.220    | media, music         | Navidrome music server (OpenSubsonic). rootfs + 50G mp0 for FLAC library (vzdump excluded) |
 
 ## Tag schema
 
@@ -24,6 +25,7 @@ Tags are layered by intent:
   inside its category.
   - infra: `iac`, `dns`, `sso`, future `vpn`, `backup`, ...
   - coolify: `control-plane`, `runtime`
+  - media: `music`, future `video`, `photos`
 
 **PVE display order.** `/etc/pve/datacenter.cfg` has `tag-style:
 ordering=config`, so the UI shows tags in the order they are written, not
@@ -118,6 +120,15 @@ disk_gb: 10
 node: pve02
 tags: [obs, metrics]
 features: {nesting: false, keyctl: false}
+
+# Optional: extra mount points for large/reproducible data that should
+# be excluded from vzdump. Each becomes an mp0/mp1/... LVM volume.
+# Used by media services (Navidrome music dir) to keep the rootfs
+# (and the backup target) small. Defaults: backup: true.
+mount_points:
+  - path: /var/lib/grafana/dashboards
+    size_gb: 20
+    backup: false
 ```
 
 ```bash

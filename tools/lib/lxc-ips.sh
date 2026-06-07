@@ -32,11 +32,12 @@ _infra_outputs=$(cd "$REPO_ROOT/iac/stacks/infra" && tofu output -json 2>/dev/nu
 _get() { printf '%s' "$_infra_outputs" | jq -r ".$1.value$2"; }
 
 # LXC IPs.
-IP_ADGUARD=$(_get lxc_ips .adguard)
-IP_GATEWAY=$(_get lxc_ips .gateway)
-IP_COOLIFY=$(_get lxc_ips .coolify)
-IP_RUNNER=$( _get lxc_ips '["coolify-runner-01"]')
-ALL_LXC_IPS="$IP_ADGUARD $IP_GATEWAY $IP_COOLIFY $IP_RUNNER"
+IP_ADGUARD=$(  _get lxc_ips .adguard)
+IP_GATEWAY=$(  _get lxc_ips .gateway)
+IP_COOLIFY=$(  _get lxc_ips .coolify)
+IP_RUNNER=$(   _get lxc_ips '["coolify-runner-01"]')
+IP_NAVIDROME=$(_get lxc_ips .navidrome)
+ALL_LXC_IPS="$IP_ADGUARD $IP_GATEWAY $IP_COOLIFY $IP_RUNNER $IP_NAVIDROME"
 
 # Network constants.
 LAN_CIDR=$(   _get network .lan_cidr)
@@ -49,7 +50,7 @@ COOLIFY_API_URL=$(_get coolify_api_url '')
 # silently render "" into the config files (e.g. AdGuard rewrites pointing to
 # nothing, Caddy reverse_proxy to http://:80).
 _val=
-for _var in IP_ADGUARD IP_GATEWAY IP_COOLIFY IP_RUNNER LAN_CIDR LAN_GATEWAY COOLIFY_API_URL; do
+for _var in IP_ADGUARD IP_GATEWAY IP_COOLIFY IP_RUNNER IP_NAVIDROME LAN_CIDR LAN_GATEWAY COOLIFY_API_URL; do
   eval "_val=\$$_var"
   case $_val in
     ''|null)
@@ -60,6 +61,6 @@ for _var in IP_ADGUARD IP_GATEWAY IP_COOLIFY IP_RUNNER LAN_CIDR LAN_GATEWAY COOL
 done
 unset _var _val
 
-export IP_ADGUARD IP_GATEWAY IP_COOLIFY IP_RUNNER ALL_LXC_IPS
+export IP_ADGUARD IP_GATEWAY IP_COOLIFY IP_RUNNER IP_NAVIDROME ALL_LXC_IPS
 export LAN_CIDR LAN_GATEWAY COOLIFY_API_URL
 unset _infra_outputs

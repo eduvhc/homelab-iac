@@ -1,0 +1,35 @@
+# Navidrome configuration. Rendered by sync.sh via envsubst with:
+#   $IP_GATEWAY  — only IP allowed to inject Remote-* identity headers
+# Everything else is a static, declarative default.
+#
+# Auth: reverse-proxy. Authelia (via Caddy on gateway) sends Remote-User /
+# Remote-Email / Remote-Name. Navidrome auto-provisions the user on first
+# request. Subsonic API clients (iOS/Mac apps) use per-user generated
+# passwords from the web UI — that flow is unaffected by reverse-proxy auth.
+
+MusicFolder = "/var/lib/navidrome/music"
+DataFolder  = "/var/lib/navidrome"
+Address     = "0.0.0.0"
+Port        = 4533
+LogLevel    = "info"
+
+# Reverse-proxy auth — only accept identity headers from the gateway LXC.
+# ND_REVERSEPROXYUSERHEADER defaults to "Remote-User" (Authelia's header).
+ReverseProxyWhitelist  = "${IP_GATEWAY}/32"
+ReverseProxyUserHeader = "Remote-User"
+
+# Disable the default admin signup flow — auth is delegated to Authelia.
+EnableUserEditing = false
+
+# Native DB backup (Navidrome ≥0.54). Backs up the SQLite DB only — NOT
+# music, NOT this config. Dumps land on rootfs so vzdump picks them up.
+# Music library is excluded from vzdump via mount_points[0].backup=false
+# in services/navidrome/lxc.yaml.
+[Backup]
+Path     = "/var/lib/navidrome/backups"
+Schedule = "0 3 * * *"
+Count    = 14
+
+# Scanner: watch the library for changes (inotify) on top of the periodic scan.
+[Scanner]
+Schedule = "@every 6h"

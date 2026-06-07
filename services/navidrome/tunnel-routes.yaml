@@ -1,0 +1,7 @@
+# Cloudflare tunnel route for Navidrome. Traffic flow:
+#   client → cloudflared tunnel → gateway:80 (Caddy) → forward_auth Authelia
+#         → reverse_proxy navidrome:4533
+# Caddy injects Remote-User; Navidrome trusts gateway IP via ReverseProxyWhitelist.
+
+- hostname: music
+  upstream: {host: gateway, port: 80}

@@ -100,6 +100,10 @@ ssh root@"$IP_GATEWAY" 'sh -s' < "$REPO_ROOT/services/gateway/bootstrap.sh"
 log_info "coolify-runner-01 ($IP_RUNNER): install Docker"
 ssh root@"$IP_RUNNER" 'sh -s' < "$REPO_ROOT/services/coolify-runner-01/bootstrap.sh"
 
+log_info "navidrome ($IP_NAVIDROME): install Navidrome binary"
+ssh root@"$IP_NAVIDROME" 'sh -s' < "$REPO_ROOT/services/navidrome/bootstrap.sh"
+[ -x "$REPO_ROOT/services/navidrome/sync.sh" ] && "$REPO_ROOT/services/navidrome/sync.sh"
+
 # ── 4. Cloudflared HA pair ──────────────────────────────────────────────────
 log_step "4/8" "install cloudflared connectors (Coolify + runner replica for HA)"
 TUNNEL_TOKEN=$(cd "$INFRA_DIR" && tofu output -raw tunnel_token)
@@ -164,5 +168,6 @@ printf '\n\033[1;32m✓ apply complete — homelab converged to desired state\03
 echo "  Coolify UI:  https://coolify.${HOMELAB_DOMAIN}"
 echo "  Authelia UI: https://auth.${HOMELAB_DOMAIN}"
 echo "  AdGuard UI:  https://adguard.${HOMELAB_DOMAIN} (via gateway with SSO)"
+echo "  Navidrome:   https://music.${HOMELAB_DOMAIN} (via gateway with SSO)"
 echo "  Admin email: $HOMELAB_ADMIN_EMAIL"
 echo "  Admin pass:  sops -d iac/secrets.sops.yaml | grep HOMELAB_ADMIN_PASSWORD"

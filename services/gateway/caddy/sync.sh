@@ -21,7 +21,7 @@ trap 'rm -rf "$RENDER_DIR"' EXIT
 
 # Restrict envsubst to known vars so we never silently overwrite Caddy's own
 # ${...} placeholders (Caddy uses {env.X} and {$X}, but be defensive).
-envsubst '$IP_COOLIFY $IP_RUNNER $IP_ADGUARD $HOMELAB_DOMAIN' < Caddyfile.tmpl > "$RENDER_DIR/Caddyfile"
+envsubst '$IP_COOLIFY $IP_RUNNER $IP_ADGUARD $IP_NAVIDROME $HOMELAB_DOMAIN' < Caddyfile.tmpl > "$RENDER_DIR/Caddyfile"
 
 command -v caddy >/dev/null && caddy validate --config "$RENDER_DIR/Caddyfile" 2>&1 | tail -3 || true
 

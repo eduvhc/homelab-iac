@@ -45,6 +45,21 @@ resource "proxmox_virtual_environment_container" "lxc" {
     size         = each.value.disk_gb
   }
 
+  # Optional extra mount points (mp0, mp1, ...) declared per service in
+  # services/<svc>/lxc.yaml under `mount_points:`. Each entry maps to a
+  # separate LVM volume on local-lvm. Used by media services (Navidrome)
+  # to keep the large data dir out of rootfs AND out of vzdump when
+  # backup: false — state-vs-media separation pattern.
+  dynamic "mount_point" {
+    for_each = lookup(each.value, "mount_points", [])
+    content {
+      volume = "local-lvm"
+      size   = "${mount_point.value.size_gb}G"
+      path   = mount_point.value.path
+      backup = lookup(mount_point.value, "backup", true)
+    }
+  }
+
   features {
     nesting = each.value.features.nesting
     keyctl  = each.value.features.keyctl

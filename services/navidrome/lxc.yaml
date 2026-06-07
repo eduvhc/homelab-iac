@@ -1,0 +1,29 @@
+# LXC spec for Navidrome (self-hosted music server, OpenSubsonic API).
+# Auth: reverse-proxy via Authelia at music.${HOMELAB_DOMAIN}.
+#
+# Storage layout (state vs media separation — canonical pattern for media
+# servers, see docs/3-node-plan.md and Navidrome backup docs):
+#   rootfs (disk_gb)         → binary, config, SQLite DB, Navidrome's own
+#                              DB backups in /var/lib/navidrome/backups
+#                              → included in vzdump
+#   mp0 (mount_points[0])    → /var/lib/navidrome/music (FLAC library)
+#                              → backup: false (excluded from vzdump)
+# Music is a reproducible asset (ripped/purchased originals exist elsewhere);
+# what cannot be lost is the DB (ratings, playlists, scrobbles), which
+# Navidrome backs up natively to rootfs on a schedule.
+
+vm_id: 104
+hostname: navidrome
+cores: 2
+memory_mb: 1024
+swap_mb: 512
+disk_gb: 8
+node: pve
+tags: [media, music]
+features:
+  nesting: false
+  keyctl: false
+mount_points:
+  - path: /var/lib/navidrome/music
+    size_gb: 50
+    backup: false

@@ -1,0 +1,24 @@
+[Unit]
+Description=Navidrome music server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=navidrome
+Group=navidrome
+WorkingDirectory=/var/lib/navidrome
+ExecStart=/usr/local/bin/navidrome --configfile /etc/navidrome/navidrome.toml
+Restart=on-failure
+RestartSec=10
+SyslogIdentifier=navidrome
+
+# Hardening — Navidrome only needs its config dir and the music + data trees.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/navidrome /etc/navidrome
+
+[Install]
+WantedBy=multi-user.target
