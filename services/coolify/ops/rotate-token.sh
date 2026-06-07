@@ -34,11 +34,14 @@ THRESHOLD=${ROTATE_THRESHOLD_DAYS:-7}
 TARGET_DIR="$SCRIPT_DIR/../target"
 
 # tinker_exec PHP_FILE [docker -e flags...]   — run a target/*.php in the
-# coolify container; returns its raw stdout.
+# coolify container; returns its raw stdout. Strips the leading `<?php`
+# tag (kept in files for editor highlighting) — tinker --execute expects
+# bare PHP, not a full PHP file.
 tinker_exec() {
   _php=$1; shift
+  _code=$(sed -e '1{/^<?php/d}' "$_php")
   ssh root@"$HOST" \
-    "docker exec $* coolify php artisan tinker --execute=$(printf '%q' "$(cat "$_php")")"
+    "docker exec $* coolify php artisan tinker --execute=$(printf '%q' "$_code")"
 }
 
 # ── Step 1: decide whether to rotate ─────────────────────────────────────────

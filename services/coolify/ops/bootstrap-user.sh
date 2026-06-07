@@ -24,11 +24,14 @@ ESC_EMAIL=$(printf '%s' "${HOMELAB_ADMIN_EMAIL:?}" | sed "s/'/'\\\\''/g")
 ESC_PASS=$(printf '%s' "${HOMELAB_ADMIN_PASSWORD:?}" | sed "s/'/'\\\\''/g")
 
 log_info "ensure root user + password matches sops"
+# Strip the leading `<?php` (kept in the file for editor highlighting) —
+# tinker --execute expects bare PHP code, not a full PHP file.
+PHP_CODE=$(sed -e '1{/^<?php/d}' "$PHP_FILE")
 result=$(ssh root@"$HOST" \
   "docker exec -e COOLIFY_BOOTSTRAP_NAME='$ESC_NAME' \
      -e COOLIFY_BOOTSTRAP_EMAIL='$ESC_EMAIL' \
      -e COOLIFY_BOOTSTRAP_PASS='$ESC_PASS' \
-     coolify php artisan tinker --execute=$(printf '%q' "$(cat "$PHP_FILE")")" \
+     coolify php artisan tinker --execute=$(printf '%q' "$PHP_CODE")" \
   | grep -oE 'USER_(UNCHANGED|UPDATED|CREATED)=[0-9]+(:[a-z,]+)?' | head -1)
 
 case "$result" in
