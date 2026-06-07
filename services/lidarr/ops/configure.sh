@@ -63,14 +63,30 @@ api() { curl -fsS -H "X-Api-Key: $LIDARR_API_KEY" -H 'Content-Type: application/
 # ── Root folder: /srv/media/music ───────────────────────────────────────────
 # Where Lidarr imports completed downloads. Same FS as the slskd download
 # dir (/srv/media/_incoming) → imports are rename(), not cross-device copy.
+# Defaults baked into the root folder pre-fill the "Add Artist" form:
+#   Quality "Lossless" (id=2) — FLAC-preferred; matches our acquisition
+#                                model (Soulseek typically has FLAC)
+#   Metadata "Standard" (id=1) — Lidarr's shipped default
+#   Monitor "all"              — track every existing album for the artist
+#   NewItemMonitor "all"       — auto-monitor newly released albums
 # Schema: references/Lidarr/src/Lidarr.Api.V1/RootFolders/RootFolderResource.cs
+# Enums: NzbDrone.Core.Music.{MonitorTypes,NewItemMonitorTypes}.cs
 if api http://127.0.0.1:8686/api/v1/rootfolder | \
    jq -e '.[] | select(.path == "/srv/media/music")' >/dev/null; then
   echo "root folder /srv/media/music: already present (skip)"
 else
   echo "root folder /srv/media/music: creating…"
-  api -X POST http://127.0.0.1:8686/api/v1/rootfolder -d \
-    '{"path":"/srv/media/music","name":"Music"}' >/dev/null
+  api -X POST http://127.0.0.1:8686/api/v1/rootfolder -d @- >/dev/null <<JSON
+{
+  "path": "/srv/media/music",
+  "name": "Music",
+  "defaultQualityProfileId": 2,
+  "defaultMetadataProfileId": 1,
+  "defaultMonitorOption": "all",
+  "defaultNewItemMonitorOption": "all",
+  "defaultTags": []
+}
+JSON
 fi
 
 # ── Indexer: Slskd ──────────────────────────────────────────────────────────
