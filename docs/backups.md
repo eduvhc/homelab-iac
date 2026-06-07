@@ -59,9 +59,124 @@ target, but UAS + SMR caused journal aborts under sustained writes. It is
 still plugged in physically but removed from the storage config and
 fstab. Retired entirely once PBS lands on dedicated hardware.
 
-## Initial PVE backup-target setup (one-time, per host)
+## Where backups live (operator reference)
 
-On a fresh PVE install, `vzdump` has no storage to write to. Steps:
+The actual on-disk paths, per layer. Two writers: the per-app **inner
+backup** scripts dump into the target LXC's filesystem at 02:50; then
+**vzdump** snapshots each LXC and lands the tarball on the USB SSD at
+03:00. The inner dumps are inside the vzdump tarballs — that's the
+defense-in-depth.
+
+### Inner backups (on the target LXC, captured by vzdump)
+
+Cron on ops fires the engine; engine SSHes to the target and writes
+inside the LXC's rootfs at:
+
+| LXC | Engine | On-disk path on the LXC | Format | Retained |
+|---|---|---|---|---|
+| coolify (200) | `postgres` (pg_dump) | `/data/coolify/backups/source/coolify-source-<UTC-ts>.dmp` | `pg_dump --format=custom` (binary, `pg_restore`-able) | last 14 |
+| gateway (103) — Authelia | `sqlite` (sqlite3 .backup) | `/var/lib/authelia/backups/authelia-<UTC-ts>.sqlite3` | SQLite (Backup API, integrity-checked) | last 14 |
+| navidrome (104) | `sqlite` | `/var/lib/navidrome/backups/navidrome-<UTC-ts>.sqlite3` | SQLite | last 14 |
+
+Filename pattern is **always** `<name>-<UTC-ts>.<ext>` where `<name>`
+is the `name:` field in `services/<svc>/backups.yaml` and the timestamp
+matches vzdump's convention (`YYYY_MM_DD-HH_MM_SS`). Retention obeys
+`retention.keep_last` in the same YAML.
+
+The cron entries that drive this live in `/etc/cron.d/iac` on ops,
+auto-generated from each `services/<svc>/backups.yaml` by the Go
+assembler (see "Inner backup pattern" below).
+
+### vzdump archives (host-level, off-LXC)
+
+The PVE host's `daily-all` job runs 03:00 and writes one tarball per
+LXC to:
+
+```
+/mnt/pve/backup/dump/vzdump-lxc-<vmid>-YYYY_MM_DD-HH_MM_SS.tar.zst
+```
+
+Examples on the current homelab (`pve03`):
+
+```
+/mnt/pve/backup/dump/vzdump-lxc-102-...tar.zst   adguard
+/mnt/pve/backup/dump/vzdump-lxc-103-...tar.zst   gateway   (incl. Authelia inner dumps)
+/mnt/pve/backup/dump/vzdump-lxc-104-...tar.zst   navidrome (incl. SQLite inner dumps)
+/mnt/pve/backup/dump/vzdump-lxc-200-...tar.zst   coolify   (incl. pg_dump source DB)
+/mnt/pve/backup/dump/vzdump-lxc-210-...tar.zst   coolify-runner-01
+```
+
+Pruning per the `daily-all` job's `keep-last=3,keep-daily=7,keep-weekly=2`
+rule gives ~14 days of host-level recoverable history (see "The vzdump
+job" below for the math).
+
+### Logs (on ops)
+
+Each backup writes its full stdout/stderr to:
+
+```
+/var/log/backup-<name>.log
+```
+
+- `/var/log/backup-coolify-source.log`
+- `/var/log/backup-authelia.log`
+- `/var/log/backup-navidrome.log`
+
+The log filename is also generated from `name:` in the YAML — same
+identifier across cron entry, dump filename prefix, and log path.
+
+### Non-backed-up paths (explicit choice)
+
+- **`/var/lib/navidrome/music/`** is a separate LVM mount point (mp0)
+  marked `backup: false` in `services/navidrome/lxc.yaml`. **Not** in
+  vzdump. FLACs are reproducible from the original source.
+- **`/opt/AdGuardHome/data/`** (BoltDB) only gets vzdump — no inner
+  backup; bbolt's `flock` prevents online copy while AdGuard runs.
+  See the AdGuard section below for the source-code-level rationale.
+
+## Proxmox host (the layer beneath the LXCs)
+
+The PVE host (`pve03`, the Beelink today) is **not** managed by this
+repo's tofu — it's a manual install (`docs/setup-from-scratch.md`
+Phase 0). Tofu drives the LXCs that live on it, not the host itself.
+That means the host has its own backup story, separate from `vzdump`.
+
+### What lives on the host that matters (and isn't in any LXC)
+
+```
+/etc/pve/                    cluster-aware config (auto-replicated in a cluster;
+                             single source on a 1-node setup like ours)
+├── jobs.cfg                 vzdump schedule + retention (see below)
+├── storage.cfg              the `backup`, `local`, `local-lvm` definitions
+├── datacenter.cfg           tag-style ordering, default migration network, …
+├── nodes/<node>/lxc/*.conf  per-LXC PVE config (memory, mp lines, etc.)
+├── nodes/<node>/qemu-server/*.conf   per-VM config (we have none today)
+├── user.cfg, priv/*         PVE web UI users + tokens
+└── corosync.conf            (cluster only — N/A on single-node)
+
+/etc/network/interfaces      vmbr0 bridge + LAN settings
+/etc/hosts, /etc/hostname    networking basics
+/etc/fstab                   USB SSD mount (`/mnt/pve/backup`)
+/etc/ssh/sshd_config         (and authorized_keys for root)
+```
+
+**Nothing in this repo backs up the PVE host itself.** If `pve03`'s
+SSD dies, you rebuild PVE from scratch (`setup-from-scratch.md`
+Phase 0) and re-apply the config above by hand. The LXCs themselves
+restore cleanly from `/mnt/pve/backup/dump/` once the host is back —
+provided the USB SSD survived.
+
+### Host-level recovery scenarios
+
+| Scenario | What survives | Recovery |
+|---|---|---|
+| PVE host SSD dies, USB SSD OK | All LXC vzdump tarballs | Reinstall PVE on new SSD → redo Phase 0 setup → `pct restore` each LXC from `/mnt/pve/backup/dump/` |
+| USB SSD dies, PVE OK | LXCs still running | Replace SSD, recreate `backup` storage (steps below), wait for next 03:00 dump |
+| Both die (fire, theft) | Only what's in this repo + your age key | Rebuild PVE → `tools/apply.sh` recreates the LXCs declaratively. **Service-level state (Coolify DB, Navidrome ratings, Authelia TOTP) is gone** — that's the explicit trade-off until off-site backup lands (see "Known gaps") |
+
+### Host-level setup (one-time, per fresh PVE install)
+
+On a fresh PVE host, `vzdump` has no storage to write to. Steps:
 
 1. Plug a USB SSD (or use a permanent disk).
 2. `mkfs.ext4 -L backup /dev/sdX1` (partition first if needed).
@@ -69,8 +184,28 @@ On a fresh PVE install, `vzdump` has no storage to write to. Steps:
    `nofail,x-systemd.device-timeout=10s,noatime`.
 4. `pvesm add dir backup --path /mnt/pve/backup --content backup,iso,vztmpl --is_mountpoint 1`
 5. Confirm the `daily-all` vzdump job exists in `/etc/pve/jobs.cfg`
-   (definition below). If not, create it via UI: Datacenter → Backup →
-   Add.
+   (definition under "The vzdump job" below). If not, create it via
+   UI: Datacenter → Backup → Add.
+
+### bpg/proxmox provider — what tofu sees (and doesn't)
+
+The provider (`iac/stacks/infra/`) drives **container lifecycle**:
+create / start / set memory / set mount points / etc. It does **NOT**
+manage:
+
+- `/etc/pve/jobs.cfg` (the vzdump schedule itself)
+- `/etc/pve/storage.cfg` (the `backup` storage pool definition)
+- `/etc/pve/datacenter.cfg` (tag styles, default settings)
+- Per-LXC `backup=0` flags via the conventional UI — instead we set
+  them via the `mount_points[].backup: false` field on each
+  `services/<svc>/lxc.yaml`, which the dynamic `mount_point` block in
+  `iac/stacks/infra/lxc.tf` passes through to the provider
+
+So the provider creates the LXC + applies its mount-point flags
+correctly, but the **vzdump job, the storage pool, and the host
+itself** are all out-of-band. See "Known gaps" for the rationale and
+the future PBS migration that closes it.
+
 
 This is currently **imperative state on the PVE host**, not in this
 repo. See the "Known gaps" section.
@@ -145,7 +280,7 @@ Quick reference of what every LXC contributes to the backup story:
 | ops (101)             | —                                                  | —          | Rootfs covered by vzdump               |
 
 Backups are **declarative**: `services/<svc>/backups.yaml` is the spec,
-`tools/lib/assemble-crons` translates it into cron entries that invoke
+`tools/lib/cmd/assemble-crons` translates it into cron entries that invoke
 `tools/lib/backups/run.sh`. No per-service shell script — adding a new
 backup is editing one YAML file. All entries run at 02:50 UTC (10 min
 before vzdump's 03:00) and write to the target LXC's rootfs so the host
@@ -161,7 +296,7 @@ declarative. Same pattern as Authelia (the engine even uses the same
 `tools/lib/backups/sqlite.sh` helper):
 
 Spec: `services/navidrome/backups.yaml` (1 entry, `engine: sqlite`).
-The cron entry is generated by `tools/lib/assemble-crons` and invokes
+The cron entry is generated by `tools/lib/cmd/assemble-crons` and invokes
 `tools/lib/backups/run.sh --engine sqlite ...`. No per-service script.
 
 Output: `root@navidrome:/var/lib/navidrome/backups/navidrome-<UTC-ts>.sqlite3`
@@ -193,7 +328,7 @@ dump — Postgres recovery on restore is fine in theory, but a clean
 We dump it ourselves via cron:
 
 Spec: `services/coolify/backups.yaml` (1 entry, `engine: postgres`).
-The cron entry is generated by `tools/lib/assemble-crons` and invokes
+The cron entry is generated by `tools/lib/cmd/assemble-crons` and invokes
 `tools/lib/backups/run.sh --engine postgres ...`.
 
 Output: `root@coolify:/data/coolify/backups/source/coolify-source-<UTC-ts>.dmp`
@@ -231,14 +366,25 @@ file safe to restore anywhere. TOTP secrets in particular cannot afford
 corruption — re-enrollment is a manual user action.
 
 Spec: `services/gateway/backups.yaml` (1 entry, `engine: sqlite`).
-The cron entry is generated by `tools/lib/assemble-crons` and invokes
+The cron entry is generated by `tools/lib/cmd/assemble-crons` and invokes
 `tools/lib/backups/run.sh --engine sqlite ...`.
 
 Output: `root@gateway:/var/lib/authelia/backups/authelia-<UTC-ts>.sqlite3`
 Method: `sqlite3 SRC ".backup DEST"` then `PRAGMA integrity_check`
 Retention: `keep_last: 14`
 
-The `sqlite3` CLI is installed in `services/gateway/ops/bootstrap.sh`.
+The `sqlite3` CLI is installed via `services/gateway/bootstrap.yaml`
+(`apt.packages` directive consumed by `tools/lib/cmd/bootstrap`).
+
+**Adjacent flow — sync engine `argon2id_hash` pre_run hook.** Authelia
+also exercises the only typed pre_run hook in the sync engine: the
+argon2id password hash for the admin user is regenerated on the gateway
+*only when* `HOMELAB_ADMIN_PASSWORD` changed (idempotency marker via
+sha256 stored alongside the hash in sops). This isn't a backup
+mechanism, but it's mentioned here because it lives in the same
+`services/gateway/authelia/sync.yaml` and was historically a shell
+wrapper next to the backup logic. The hook persists the new hash to
+sops; commit + push `iac/secrets.sops.yaml` after the rare regeneration.
 
 **Restore the Authelia DB only**:
 ```bash
@@ -331,24 +477,43 @@ captures the dump alongside the rest of the LXC.
 ### Layout
 
 ```
-tools/lib/backups/
-├── run.sh                  driver — dispatched by cron; --engine X ...
-├── postgres.sh             pg_dump_in_container helper
-├── sqlite.sh               sqlite_backup_remote helper (+ integrity_check)
-└── retention.sh            rotate_keep_last helper
+tools/lib/
+├── cmd/assemble-crons/      Go program — reads every services/*/backups.yaml
+│                            + services/*/cron.yaml + iac/cron.yaml and
+│                            emits /etc/cron.d/iac
+└── backups/                 engine helpers + dispatcher (shell)
+    ├── run.sh               driver — dispatched by cron at 02:50:
+    │                          run.sh --engine X --name Y ...
+    ├── postgres.sh          pg_dump_in_container helper
+    ├── sqlite.sh            sqlite_backup_remote helper (+ integrity_check)
+    └── retention.sh         rotate_keep_last helper
 
 services/<svc>/
-└── backups.yaml            declarative spec (list of backup entries)
-
-tools/lib/assemble-crons    Go program that reads each backups.yaml +
-                            cron.yaml and emits /etc/cron.d/iac
+└── backups.yaml             declarative spec (list of backup entries)
 ```
 
-The flow: assemble-crons reads `services/*/backups.yaml`, validates each
-spec against its engine schema, and emits a cron entry per backup that
-calls `tools/lib/backups/run.sh` with `--engine X --name Y …` flags.
-At cron time, `run.sh` parses its own flags, dispatches to the right
-engine helper, and rotates the dest dir.
+The flow:
+
+```
+01.  Operator runs tools/apply.sh → phase 8:
+       go run ./tools/lib/cmd/assemble-crons  emits /etc/cron.d/iac on ops
+
+02.  Cron fires (50 2 * * * UTC) on ops:
+       /root/homelab-iac/tools/lib/backups/run.sh --engine X --name Y ...
+                                            >> /var/log/backup-<name>.log
+
+03.  run.sh source-loads its engine helper (postgres.sh / sqlite.sh),
+     SSHes to the target LXC, runs pg_dump / sqlite3 .backup INSIDE
+     the LXC, writing the dump file under DEST_DIR on the LXC's rootfs.
+     Then calls rotate_keep_last to drop dumps past keep_last.
+
+04.  10 min later (03:00 UTC), the PVE host's vzdump runs and snapshots
+     each LXC into /mnt/pve/backup/dump/vzdump-lxc-<vmid>-<ts>.tar.zst —
+     the fresh inner dump file is inside that tarball.
+```
+
+Two writers, both idempotent, neither needs the other to be working —
+a vzdump still happens even if a backup script silently broke.
 
 ### Backup spec schema (`services/<svc>/backups.yaml`)
 
@@ -396,14 +561,31 @@ in favor of the script).
 
 ### Adding inner backups for a new service
 
-1. If the engine helper doesn't exist yet, add `tools/lib/backups/<engine>.sh`
-   (function signature similar to `postgres.sh::pg_dump_in_container` or
-   `sqlite.sh::sqlite_backup_remote`) and wire it into
-   `tools/lib/backups/run.sh`'s dispatcher + Go assembler validation.
-2. Add an entry to `services/<svc>/backups.yaml` with the engine, host,
-   dest_dir, retention.keep_last, schedule + engine-specific fields.
-3. Update this doc's coverage matrix + per-service section.
-4. `tools/apply.sh` regenerates `/etc/cron.d/iac` automatically.
+The common case (existing engine):
+
+1. Add an entry to `services/<svc>/backups.yaml` with `engine`, `host`,
+   `dest_dir`, `retention.keep_last`, `schedule` + the engine-specific
+   fields (postgres: container/user/database; sqlite: src).
+2. Update this doc's "Where backups live" table + the coverage matrix.
+3. Re-run `tools/apply.sh` (phase 8 regenerates `/etc/cron.d/iac`).
+
+For a brand-new engine type (e.g. MySQL):
+
+1. Add `tools/lib/backups/<engine>.sh` with a helper matching
+   `pg_dump_in_container` / `sqlite_backup_remote` shape (function
+   takes target+args, writes a timestamped dump to DEST_DIR).
+2. Wire the engine into `tools/lib/backups/run.sh`'s `case "$engine"`
+   dispatcher.
+3. Wire the engine into the Go assembler:
+   `tools/lib/internal/cron/cron.go` → `backupToEntry` switch.
+4. Then add the `services/<svc>/backups.yaml` entry as above.
+
+### Restoring from an inner backup
+
+The on-disk paths from "Where backups live" plus the engine-native
+restore tool. Per-service procedures live in the "Per-service
+exceptions" section above (each engine has its own restore command —
+`pg_restore` for postgres, `cp` for sqlite, etc.).
 
 ## Restore procedures
 

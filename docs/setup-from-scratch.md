@@ -257,7 +257,7 @@ This runs 8 idempotent phases in sequence:
 6. `tofu apply` platform stack. Register runner in Coolify.
 7. Trigger Coolify's Docker engine validation on the runner.
 8. Sync cron jobs to `/etc/cron.d/iac` (assembled from `iac/cron.yaml` +
-   `services/*/cron.yaml` via `tools/lib/assemble-crons` Go binary).
+   `services/*/cron.yaml` via `tools/lib/cmd/assemble-crons` Go binary).
 
 Expected total: ~3-5 min on a warm PVE.
 
