@@ -1,7 +1,7 @@
 #!/bin/sh
 # One-time setup of the Navidrome LXC: installs the binary, creates the
 # system user/dirs, sets perms on the mp0 music volume. Idempotent.
-# Config (navidrome.toml) is pushed by sync.sh after.
+# Config (navidrome.toml) is pushed by the sync engine (services/<svc>/sync.yaml) after.
 #
 # Auth model: reverse-proxy via Authelia at music.${HOMELAB_DOMAIN}.
 #   - Caddy on the gateway runs forward_auth → injects Remote-User header.
@@ -43,4 +43,4 @@ install -d -o navidrome -g navidrome -m 0755 /var/lib/navidrome/music
 systemctl daemon-reload
 systemctl enable navidrome >/dev/null 2>&1 || true
 echo "==> navidrome bootstrap complete. Now push config:"
-echo "    services/navidrome/sync.sh"
+echo "    sync_service navidrome (or tools/apply.sh)"

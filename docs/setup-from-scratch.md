@@ -303,12 +303,12 @@ in **`docs/backups.md`**. Do everything backup-related from there.
 | Add a CF tunnel route | `services/<svc>/tunnel-routes.yaml` | `tofu apply` in `iac/stacks/infra` |
 | Add a runner | new `services/coolify-runner-NN/` + `iac/stacks/platform/runner.tf` | `tofu apply` in `iac/stacks/platform` |
 | AdGuard rewrites/filters | `services/adguard/AdGuardHome.yaml.tmpl` | sync engine (`services/adguard/sync.yaml`) |
-| Authelia OIDC client | `services/gateway/authelia/configuration.yml.tmpl` | `services/gateway/authelia/sync.sh` (hybrid: hash + engine) |
+| Authelia OIDC client | `services/gateway/authelia/configuration.yml.tmpl` | `services/gateway/authelia/scripts/sync.sh` (hybrid: hash + engine) |
 | Caddy reverse proxy entry | `services/gateway/caddy/Caddyfile.tmpl` | sync engine (`services/gateway/caddy/sync.yaml`) |
 | Navidrome config | `services/navidrome/navidrome.toml.tmpl` | sync engine (`services/navidrome/sync.yaml`) |
 | Add/edit a cron job | `services/<svc>/cron.yaml` (or `iac/cron.yaml` if IaC-wide) | `tools/apply.sh` (phase 8 reconciles) |
 | Add a backup | `services/<svc>/backups.yaml` | `tools/apply.sh` (phase 8 reconciles) |
-| Add / rotate a secret | `sops iac/secrets.sops.yaml` (or `FORCE=1 services/coolify/rotate-token.sh` for Coolify) | commit + push the encrypted file |
+| Add / rotate a secret | `sops iac/secrets.sops.yaml` (or `FORCE=1 services/coolify/scripts/rotate-token.sh` for Coolify) | commit + push the encrypted file |
 
 The **sync engine** (`tools/lib/sync`, Go binary) reads each
 `services/<svc>/sync.yaml` and converges the target LXC to the declared
@@ -329,7 +329,7 @@ The next `tools/apply.sh` reinstalls cloudflared on both connectors with
 the new token.
 
 **Lost or expired Coolify API token.** Run `FORCE=1
-services/coolify/rotate-token.sh` to mint a fresh token and write it to
+services/coolify/scripts/rotate-token.sh` to mint a fresh token and write it to
 `iac/secrets.sops.yaml`. Commit + push to share with other operator
 machines. There is no auto-cron. The script is operator-driven (it
 commits via git, which needs a human-supervised push).

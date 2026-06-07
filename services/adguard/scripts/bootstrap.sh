@@ -1,7 +1,7 @@
 #!/bin/sh
 # One-time setup of an AdGuard Home LXC.
 # Installs the AGH binary + creates the directory; idempotent.
-# Configuration is then pushed via sync.sh.
+# Configuration is then pushed via the sync engine (services/<svc>/sync.yaml).
 set -e
 
 export DEBIAN_FRONTEND=noninteractive
@@ -18,6 +18,6 @@ curl -fsSL https://raw.githubusercontent.com/AdguardTeam/AdGuardHome/master/scri
 sh /tmp/install.sh -r >/dev/null
 rm -f /tmp/install.sh
 
-# Stop immediately - config will be pushed by sync.sh before we want it running
+# Stop immediately - config will be pushed by the sync engine (services/<svc>/sync.yaml) before we want it running
 systemctl stop AdGuardHome
-echo "AdGuardHome installed; run sync.sh from ops LXC to push config"
+echo "AdGuardHome installed; sync engine will push config"

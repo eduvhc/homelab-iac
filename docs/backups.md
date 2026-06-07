@@ -238,7 +238,7 @@ Output: `root@gateway:/var/lib/authelia/backups/authelia-<UTC-ts>.sqlite3`
 Method: `sqlite3 SRC ".backup DEST"` then `PRAGMA integrity_check`
 Retention: `keep_last: 14`
 
-The `sqlite3` CLI is installed in `services/gateway/bootstrap.sh`.
+The `sqlite3` CLI is installed in `services/gateway/scripts/bootstrap.sh`.
 
 **Restore the Authelia DB only**:
 ```bash

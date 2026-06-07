@@ -18,7 +18,7 @@
 host: navidrome
 
 files:
-  - src: navidrome.toml.tmpl
+  - src: config/navidrome.toml.tmpl
     dest: /etc/navidrome/navidrome.toml
     envsubst: [IP_GATEWAY]
     owner: navidrome:navidrome
@@ -26,7 +26,7 @@ files:
     on_change:
       - restart: navidrome.service
 
-  - src: navidrome.service
+  - src: config/navidrome.service
     dest: /etc/systemd/system/navidrome.service
     mode: "0644"
     on_change:

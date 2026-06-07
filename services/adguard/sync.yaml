@@ -6,7 +6,7 @@
 host: adguard
 
 files:
-  - src: AdGuardHome.yaml.tmpl
+  - src: config/AdGuardHome.yaml.tmpl
     dest: /opt/AdGuardHome/AdGuardHome.yaml
     envsubst: [IP_GATEWAY, IP_COOLIFY, HOMELAB_DOMAIN]
     mode: "0600"
@@ -14,7 +14,7 @@ files:
     on_change:
       - restart: AdGuardHome.service
 
-  - src: nftables.conf.tmpl
+  - src: config/nftables.conf.tmpl
     dest: /etc/nftables.conf
     envsubst: [LAN_CIDR, IP_GATEWAY]
     mode: "0644"

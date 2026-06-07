@@ -1,5 +1,5 @@
 # Render+push spec for Authelia. The argon2id password-hash management
-# (regenerate-if-source-password-changed) stays in services/gateway/authelia/sync.sh
+# (regenerate-if-source-password-changed) stays in services/gateway/authelia/scripts/sync.sh
 # because it has conditional logic + mutates sops — not expressible as
 # declarative YAML without bespoke directives. That script exports
 # HOMELAB_ADMIN_PWHASH and then dispatches to the sync engine against
@@ -12,7 +12,7 @@
 host: gateway
 
 files:
-  - src: configuration.yml.tmpl
+  - src: config/configuration.yml.tmpl
     dest: /etc/authelia/configuration.yml
     envsubst: [HOMELAB_DOMAIN]
     owner: authelia:authelia
@@ -21,7 +21,7 @@ files:
     on_change:
       - restart: authelia.service
 
-  - src: users_database.yml.tmpl
+  - src: config/users_database.yml.tmpl
     dest: /etc/authelia/users_database.yml
     envsubst: [HOMELAB_ADMIN_NAME, HOMELAB_ADMIN_EMAIL, HOMELAB_ADMIN_PWHASH]
     owner: authelia:authelia
@@ -30,7 +30,7 @@ files:
     on_change:
       - restart: authelia.service
 
-  - src: authelia.service
+  - src: config/authelia.service
     dest: /etc/systemd/system/authelia.service
     mode: "0644"
     on_change:

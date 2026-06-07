@@ -5,7 +5,7 @@
 host: gateway
 
 files:
-  - src: Caddyfile.tmpl
+  - src: config/Caddyfile.tmpl
     dest: /etc/caddy/Caddyfile
     # Restrict envsubst to known vars so we never silently overwrite Caddy's
     # own ${...} placeholders (it uses {env.X} and {$X}, but be defensive).

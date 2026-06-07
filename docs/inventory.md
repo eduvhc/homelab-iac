@@ -91,6 +91,25 @@ These are the rough edges to know.
   apply, including for unrelated changes (CF DNS edits, etc.). If PVE is
   down, tofu is stuck. Accepted trade-off.
 
+### Standard layout per service
+
+Every `services/<svc>/` follows the same shape:
+
+```
+services/<svc>/
+├── *.yaml             ← manifests (control plane: lxc, sync, backups,
+│                       cron, tunnel-routes) — discovered by tofu/Go
+│                       assemblers via fileset/glob
+├── config/            ← templates + static files pushed to the LXC
+│                       (rendered by the sync engine; src paths in
+│                       sync.yaml are relative to the service dir)
+└── scripts/           ← shell (bootstrap, hybrid sync wrappers, installers)
+                        — invoked from tools/apply.sh
+```
+
+Sub-services (e.g. `services/gateway/{authelia,caddy}/`) follow the same
+recursive shape: their own `*.yaml` + `config/` + `scripts/`.
+
 ### Adding a new LXC
 
 Two file edits, then `tofu apply`. Example for a Grafana LXC on `pve02`:
@@ -126,7 +145,7 @@ mount_points:
 cd iac/stacks/infra && tofu apply
 ```
 
-Bootstrap stays manual per service. Create `services/grafana/bootstrap.sh`
+Bootstrap stays manual per service. Create `services/grafana/scripts/bootstrap.sh`
 and have `tools/apply.sh` (or a one-off ssh) run it after the LXC is up.
 
 ### Adding a tunnel route for the new LXC
