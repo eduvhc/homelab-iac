@@ -22,9 +22,9 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO_ROOT=${SCRIPT_DIR%/tools/*}
 export REPO_ROOT
 # shellcheck disable=SC1091
-. "$REPO_ROOT/tools/lib/common.sh"
+. "$REPO_ROOT/tools/lib/core/common.sh"
 # shellcheck disable=SC1091
-. "$REPO_ROOT/tools/lib/ip-from-yaml.sh"
+. "$REPO_ROOT/tools/lib/infra/ips.sh"
 # shellcheck disable=SC1091
 . "$REPO_ROOT/tools/lib/backups/retention.sh"
 

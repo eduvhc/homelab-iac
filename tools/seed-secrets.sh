@@ -33,15 +33,40 @@ set -eu
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/lib/common.sh"
+. "$SCRIPT_DIR/lib/core/common.sh"
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/lib/sops.sh"
-# shellcheck disable=SC1091
-. "$SCRIPT_DIR/lib/cloudflare.sh"
+. "$SCRIPT_DIR/lib/secrets/sops.sh"
 
 case "${1:-}" in
   -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
+
+# ── Cloudflare API helper (inlined — single caller, was tools/lib/cloudflare.sh) ──
+# cf_api METHOD PATH [JSON-BODY]
+#   PATH is the part after https://api.cloudflare.com/client/v4 (e.g.
+#   "/zones?per_page=1", "/accounts/$AID/r2/buckets"). Requires $CF_TOKEN
+#   exported with the right scopes; returns response body on stdout (does
+#   not validate HTTP status — callers should jq the body themselves).
+cf_api() {
+  : "${CF_TOKEN:?cf_api: CF_TOKEN not exported}"
+  _m=$1; _p=$2; _b=${3:-}
+  if [ -n "$_b" ]; then
+    curl -sS -X "$_m" \
+      -H "Authorization: Bearer $CF_TOKEN" \
+      -H "Content-Type: application/json" \
+      --data "$_b" \
+      "https://api.cloudflare.com/client/v4$_p"
+  else
+    curl -sS -X "$_m" \
+      -H "Authorization: Bearer $CF_TOKEN" \
+      "https://api.cloudflare.com/client/v4$_p"
+  fi
+}
+
+# cf_account_id_for_zone ZONE_NAME — return the account id that owns a zone.
+cf_account_id_for_zone() {
+  cf_api GET "/zones?name=$1&per_page=1" | jq -r '.result[0].account.id // empty'
+}
 
 require_cmd sops age jq curl openssl
 

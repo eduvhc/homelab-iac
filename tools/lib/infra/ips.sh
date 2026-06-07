@@ -1,15 +1,15 @@
 # shellcheck shell=sh
 # Resolve a service-name → IP lookup directly from network/ips.yaml,
 # without going through tofu output. Use this from cron-driven scripts
-# (backup-*.sh, etc.) where the full lxc-ips.sh round-trip via tofu
+# (backup-*.sh, etc.) where the full tofu.sh round-trip via tofu
 # state is overkill.
 #
-# tools/lib/lxc-ips.sh remains the canonical source for the apply
+# tools/lib/infra/tofu.sh remains the canonical source for the apply
 # pipeline (single tofu call, exports everything). This helper exists
 # for hot paths that just need one IP and don't want a tofu dependency.
 #
 # Usage:
-#   . "$REPO_ROOT/tools/lib/ip-from-yaml.sh"
+#   . "$REPO_ROOT/tools/lib/infra/ips.sh"
 #   HOST=root@$(ip_of gateway)
 #
 # Pre-req: $REPO_ROOT set.

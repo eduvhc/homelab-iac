@@ -3,7 +3,7 @@
 # Pure POSIX, runs over SSH on the target host.
 #
 # Source from a per-service backup script:
-#   . "$REPO_ROOT/tools/backups/lib/retention.sh"
+#   . "$REPO_ROOT/tools/lib/backups/retention.sh"
 #   rotate_keep_last "$HOST" /data/coolify/backups/source 'coolify-source-*.dmp' 14
 
 # rotate_keep_last HOST DIR PATTERN KEEP

@@ -20,7 +20,7 @@
 #   - sops + age installed; age private key at ~/.config/sops/age/keys.txt
 #   - Ops LXC has /root/.ssh/id_ed25519 trusted by PVE root
 #
-# LXC IPs are NEVER hardcoded here. After Phase 1, tools/lib/lxc-ips.sh
+# LXC IPs are NEVER hardcoded here. After Phase 1, tools/lib/infra/tofu.sh
 # reads tofu output and exports IP_ADGUARD / IP_GATEWAY / IP_COOLIFY /
 # IP_RUNNER / ALL_LXC_IPS. Change IPs in network/ips.yaml.
 
@@ -29,7 +29,7 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/lib/common.sh"
+. "$SCRIPT_DIR/lib/core/common.sh"
 case "${1:-}" in
   -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
@@ -71,7 +71,7 @@ tofu apply -input=false -auto-approve
 
 # Load IPs from tofu output now that infra state is populated.
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/lib/lxc-ips.sh"
+. "$SCRIPT_DIR/lib/infra/tofu.sh"
 log_info "IPs loaded: $ALL_LXC_IPS"
 
 # ── 2. SSH reachability ─────────────────────────────────────────────────────

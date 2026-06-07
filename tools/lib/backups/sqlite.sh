@@ -3,7 +3,7 @@
 # to the remote host's filesystem so vzdump captures it.
 #
 # Source from a per-service backup script:
-#   . "$REPO_ROOT/tools/backups/lib/sqlite.sh"
+#   . "$REPO_ROOT/tools/lib/backups/sqlite.sh"
 #   sqlite_backup_remote \
 #     "$HOST" /var/lib/authelia/db.sqlite3 \
 #     /var/lib/authelia/backups authelia

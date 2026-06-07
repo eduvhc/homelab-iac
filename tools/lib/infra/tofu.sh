@@ -7,7 +7,7 @@
 # (including envsubst rendering of *.tmpl config files).
 #
 # Usage:
-#   . "$REPO_ROOT/tools/lib/lxc-ips.sh"
+#   . "$REPO_ROOT/tools/lib/infra/tofu.sh"
 #   ssh root@"$IP_COOLIFY" ...
 #   envsubst < Caddyfile.tmpl > Caddyfile
 #   for ip in $ALL_LXC_IPS; do ...; done
@@ -19,13 +19,13 @@
 
 set -e
 
-[ -n "${REPO_ROOT:-}" ] || { echo "lxc-ips.sh: REPO_ROOT not set" >&2; exit 1; }
-command -v tofu >/dev/null || { echo "lxc-ips.sh: tofu not in PATH" >&2; exit 1; }
-command -v jq >/dev/null   || { echo "lxc-ips.sh: jq not in PATH" >&2; exit 1; }
+[ -n "${REPO_ROOT:-}" ] || { echo "tofu.sh: REPO_ROOT not set" >&2; exit 1; }
+command -v tofu >/dev/null || { echo "tofu.sh: tofu not in PATH" >&2; exit 1; }
+command -v jq >/dev/null   || { echo "tofu.sh: jq not in PATH" >&2; exit 1; }
 
 # Single tofu invocation reading all outputs at once — saves ~1s.
 _infra_outputs=$(cd "$REPO_ROOT/iac/stacks/infra" && tofu output -json 2>/dev/null) || {
-  echo "lxc-ips.sh: tofu output -json failed (has stacks/infra been applied?)" >&2
+  echo "tofu.sh: tofu output -json failed (has stacks/infra been applied?)" >&2
   exit 1
 }
 
@@ -54,7 +54,7 @@ for _var in IP_ADGUARD IP_GATEWAY IP_COOLIFY IP_RUNNER IP_NAVIDROME LAN_CIDR LAN
   eval "_val=\$$_var"
   case $_val in
     ''|null)
-      echo "lxc-ips.sh: $_var is empty (tofu output returned '$_val') — has stacks/infra been applied?" >&2
+      echo "tofu.sh: $_var is empty (tofu output returned '$_val') — has stacks/infra been applied?" >&2
       exit 1
       ;;
   esac

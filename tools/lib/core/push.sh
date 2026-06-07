@@ -2,7 +2,7 @@
 # Shared helpers for services/*/sync.sh.
 #
 # Usage:
-#   . "$REPO_ROOT/tools/lib/sync.sh"
+#   . "$REPO_ROOT/tools/lib/core/push.sh"
 #   needs_push <local-file> <remote-path>   # returns 0 if remote differs
 #
 # Pre-reqs:

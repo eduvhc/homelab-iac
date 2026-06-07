@@ -3,7 +3,7 @@
 # the remote host's filesystem so vzdump captures it.
 #
 # Source from a per-service backup script:
-#   . "$REPO_ROOT/tools/backups/lib/postgres.sh"
+#   . "$REPO_ROOT/tools/lib/backups/postgres.sh"
 #   pg_dump_in_container \
 #     "$HOST" coolify-db coolify coolify \
 #     /data/coolify/backups/source coolify-source

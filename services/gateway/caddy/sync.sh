@@ -6,12 +6,12 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO_ROOT=${SCRIPT_DIR%/services/*}
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # shellcheck disable=SC1091
-. "$REPO_ROOT/tools/lib/common.sh"
+. "$REPO_ROOT/tools/lib/core/common.sh"
 source_envrc
 # shellcheck disable=SC1091
-. "$REPO_ROOT/tools/lib/lxc-ips.sh"
+. "$REPO_ROOT/tools/lib/infra/tofu.sh"
 # shellcheck disable=SC1091
-. "$REPO_ROOT/tools/lib/sync.sh"
+. "$REPO_ROOT/tools/lib/core/push.sh"
 
 cd "$SCRIPT_DIR"
 HOST="root@$IP_GATEWAY"

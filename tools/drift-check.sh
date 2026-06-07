@@ -11,7 +11,7 @@ set -eu
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/lib/common.sh"
+. "$SCRIPT_DIR/lib/core/common.sh"
 
 case "${1:-}" in
   -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;

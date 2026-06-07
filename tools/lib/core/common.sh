@@ -4,7 +4,7 @@
 # Usage:
 #   #!/bin/sh   (or #!/bin/bash for scripts that need bashisms)
 #   set -eu     (or `set -euo pipefail` in bash)
-#   . "$(cd "$(dirname "$0")" && pwd)/../tools/lib/common.sh"
+#   . "$(cd "$(dirname "$0")" && pwd)/../tools/lib/core/common.sh"
 #
 # After sourcing, the following are defined:
 #   $REPO_ROOT      absolute path to the homelab-iac repo

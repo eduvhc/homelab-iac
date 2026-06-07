@@ -18,9 +18,9 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/../../tools/lib/common.sh"
+. "$SCRIPT_DIR/../../tools/lib/core/common.sh"
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/../../tools/lib/sops.sh"
+. "$SCRIPT_DIR/../../tools/lib/secrets/sops.sh"
 
 source_envrc
 require_cmd sops jq ssh

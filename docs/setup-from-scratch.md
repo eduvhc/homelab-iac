@@ -18,7 +18,7 @@ State lives in **Cloudflare R2** (s3 backend, native `use_lockfile`,
 PBKDF2-AES-GCM encryption on top via OpenTofu's `encryption{}` block).
 
 Secrets are encrypted with **age** via **sops** at `iac/secrets.sops.yaml`,
-committed to the repo. `tools/lib/common.sh source_envrc` decrypts them
+committed to the repo. `tools/lib/core/common.sh source_envrc` decrypts them
 into `$KEY` env vars (auto-loaded via direnv per-stack `.envrc` files).
 The age private key lives at `~/.config/sops/age/keys.txt` on operator
 machines (Mac + ops LXC). Back it up.
