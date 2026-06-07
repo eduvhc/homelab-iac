@@ -1,17 +1,16 @@
 # Backups
 
-How data in the homelab is protected today, and what the realistic failure
-recovery paths look like. Read this before deleting anything important.
-
-> Companion docs: `inventory.md` (storage table), `setup-from-scratch.md`
-> (PVE backup target init), `3-node-plan.md` (future PBS migration).
+Single source of truth for everything backup-related in the homelab:
+storage layout, current strategy, restore procedures, gaps, and the
+planned PBS migration. If it's about losing or recovering data, it's
+here.
 
 ## TL;DR
 
-Everything is backed up by **one daily `vzdump` job** on the PVE host,
-running at 03:00 → USB SSD at `/mnt/pve/backup`. Two things are NOT in
-that job by design: **media files** (excluded via `backup: false` on the
-mount point) and **encrypted secrets** (live in this git repo + R2).
+Everything is captured by **one daily `vzdump` job** on the PVE host
+(03:00 → USB SSD at `/mnt/pve/backup`). Two assets are NOT in that job
+by design: **media files** (excluded via `backup: false` on the LXC
+mount point) and **encrypted secrets** (live in git + R2).
 
 Restore = `pct restore <id> backup:backup/vzdump-lxc-<id>-...` from any
 recent snapshot. Loss tolerance is **≤24h** for service state, **0** for
@@ -32,19 +31,53 @@ media (intact at source) and secrets (in git).
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-\* Music is treated as a reproducible asset — originals live elsewhere
-(your rip source, the CD, the download). If the LXC dies, restore the
-LXC (state + DB) from vzdump, then re-sync music with `rsync` from your
-local copy. The Navidrome DB preserves ratings/playlists/play counts.
+\* Music is a reproducible asset — originals live elsewhere (rip source,
+CD, download). If the LXC dies, restore the LXC (state + DB) from
+vzdump, then re-sync music with `rsync` from your local copy. The
+Navidrome DB preserves ratings/playlists/play counts.
 
 † The age private key (`~/.config/sops/age/keys.txt`) is what unlocks
 `iac/secrets.sops.yaml`. Lose it and the encrypted file in git is
 unreadable. Keep a copy in a password manager / printed in a safe.
 
+## Storage layout
+
+Backups land on the `backup` storage pool. Current PVE host (`pve03`,
+Beelink) layout:
+
+| Storage | Backing | Path | Content | Capacity |
+|---|---|---|---|---|
+| `local` | Internal SSD M.2 | `/var/lib/vz` | import, iso, vztmpl | — |
+| `local-lvm` | Internal SSD M.2 (LVM-thin) | `/dev/pve/data` | rootdir, images | 365 GB |
+| `backup` | USB SSD Samsung 860 EVO 500GB | `/mnt/pve/backup` | backup, iso, vztmpl, images, rootdir, snippets | 480 GB |
+
+Adequate for the current 5 LXCs (~8 GB used). Will get tight when media
+grows or more LXCs are added.
+
+The Seagate ST2000LM007 HDD (SMR) was originally mounted as the backup
+target, but UAS + SMR caused journal aborts under sustained writes. It is
+still plugged in physically but removed from the storage config and
+fstab. Retired entirely once PBS lands on dedicated hardware.
+
+## Initial PVE backup-target setup (one-time, per host)
+
+On a fresh PVE install, `vzdump` has no storage to write to. Steps:
+
+1. Plug a USB SSD (or use a permanent disk).
+2. `mkfs.ext4 -L backup /dev/sdX1` (partition first if needed).
+3. Add to `/etc/fstab` using UUID with
+   `nofail,x-systemd.device-timeout=10s,noatime`.
+4. `pvesm add dir backup --path /mnt/pve/backup --content backup,iso,vztmpl --is_mountpoint 1`
+5. Confirm the `daily-all` vzdump job exists in `/etc/pve/jobs.cfg`
+   (definition below). If not, create it via UI: Datacenter → Backup →
+   Add.
+
+This is currently **imperative state on the PVE host**, not in this
+repo. See the "Known gaps" section.
+
 ## The vzdump job (current)
 
-Defined in `/etc/pve/jobs.cfg` on the PVE host (NOT in this repo —
-managed once, see `setup-from-scratch.md`):
+Defined in `/etc/pve/jobs.cfg` on the PVE host:
 
 ```ini
 vzdump: daily-all
@@ -66,14 +99,6 @@ vzdump: daily-all
 Effective window: ~14 days of recoverable history per LXC. Retention is
 **per guest**, not per job — adding more LXCs grows the storage demand
 linearly, not the retention depth.
-
-**Storage target** (`backup` in `pvesm status`):
-
-| Backing | Path | Capacity | Used (2026-06) |
-|---|---|---|---|
-| USB SSD Samsung 860 EVO 500GB | `/mnt/pve/backup` | 480 GB | ~8 GB (1.7%) |
-
-Adequate for the current 5 LXCs. Will get tight when media grows.
 
 ## State vs media separation (the load-bearing pattern)
 
@@ -125,11 +150,11 @@ That dir lives on rootfs, so `vzdump` captures it. Net effect: **two
 independent DB snapshots per day** (the native one at 03:00, the vzdump
 one shortly after), at different layers — defense in depth.
 
-Why bother with both? The native dump is a clean SQLite file you can
-copy out and `sqlite3` into anywhere. The vzdump captures the live DB
-mid-write (snapshot mode is consistent at the filesystem level, but a
-SQLite WAL may need recovery on restore). The native dump is the
-preferred restore source; vzdump is the fallback if the LXC is gone.
+Why both? The native dump is a clean SQLite file you can copy out and
+`sqlite3` into anywhere. The vzdump captures the live DB mid-write
+(snapshot mode is consistent at the filesystem level, but a SQLite WAL
+may need recovery on restore). The native dump is the preferred restore
+source; vzdump is the fallback if the LXC is gone.
 
 **Restore the DB only** (no LXC recreate needed):
 ```bash
@@ -192,6 +217,13 @@ Lose the age key and the sops file in git is permanently unreadable.
 The `.sops.yaml` recipients list supports multiple keys — you can add
 a second age key (e.g. a YubiKey-stored one) as off-site recovery.
 
+**If the age key is lost AND no second recipient exists** (worst case):
+create a new age key, regenerate the sops file from scratch via
+`tools/seed-secrets.sh` + `sops` (template flow), then re-encrypt all
+tofu state with `tofu init -migrate-state` after editing the
+`encryption{}` block to map old → new passphrase. Every secret in
+`secrets.template.yaml` must be re-seeded by hand.
+
 ### Restore tofu state
 
 State lives in Cloudflare R2 (`s3://homelab-iac-state/...`), encrypted
@@ -203,6 +235,11 @@ aws s3 cp s3://homelab-iac-state/infra/terraform.tfstate /tmp/
 # Or list versions if R2 versioning is on
 aws s3api list-object-versions --bucket homelab-iac-state --prefix infra/
 ```
+
+Today the only safety net for R2 is OpenTofu's `encryption{}` block plus
+R2's 24h soft-delete window. A daily `aws s3 cp` of the state to a
+second location is a candidate for `iac/cron.yaml` (TODO, not
+implemented).
 
 ## Disaster scenarios
 
@@ -234,19 +271,59 @@ trade-off — no off-site backup of LXC state today.
 
 3. **vzdump has no deduplication.** Each daily snapshot is a full
    compressed tarball.
-   - Fix: PBS migration (planned, `docs/3-node-plan.md`). PBS chunks at
-     4 MiB with content-defined boundaries; daily incremental of an
-     unchanged LXC is essentially free. Also adds: client-side encryption,
-     S3-compat datastore (R2), verify jobs, GC, sync to a second
-     datastore for off-site.
+   - Fix: PBS migration (see next section). PBS chunks at 4 MiB with
+     content-defined boundaries; daily incremental of an unchanged LXC
+     is essentially free.
 
 4. **The `daily-all` job is configured imperatively on the PVE host**
    (`/etc/pve/jobs.cfg`), not in this repo. Re-creating the PVE host
-   from scratch requires re-running the steps in `setup-from-scratch.md`
-   Phase "Backup target" by hand.
+   from scratch requires re-running the "Initial PVE backup-target
+   setup" section by hand.
    - Fix: tofu the vzdump job. Low priority — it's a 5-line one-time
      setup, and the bpg/proxmox provider doesn't model jobs.cfg yet
      last I checked.
+
+## Future: PBS 4.2 migration (planned)
+
+When the 3-node cluster lands (see `3-node-plan.md` for the cluster
+plan itself), the backup target migrates from "vzdump → USB SSD" to
+**PBS 4.2** running as an LXC on `pve01`. This rewrites most of the
+gaps above. Architectural decision recap:
+
+**Why PBS over staying on vzdump-USB:**
+- Dedupe ~10-20× on LXCs with similar OS bases
+- Content-defined chunking (4 MiB): incremental of an unchanged LXC ≈ 0 bytes
+- Native verify jobs (catches corruption proactively)
+- GC + retention as first-class operations
+- Sync jobs to a second datastore (off-site or offline copy)
+
+**Why PBS in an LXC, not a 4th physical host:**
+- Officially recommended as a VM, but community runs it in LXC for years
+- Trade-off: PBS on a cluster node = SPOF if that node dies. Mitigated
+  by sync to a second datastore (the USB SSD as offline copy)
+- A 4th dedicated device would be more correct, but the Beelink + USB
+  still survives as "off-site improvised"
+
+**Plan when PBS lands:**
+- LXC `pbs` on `pve01`, Debian 13, 2c/4G/100G
+- Primary datastore on a dedicated ZFS dataset: `zfs create tank/pbs-store`
+- Add as storage `pbs-main` in Datacenter
+- Migrate `daily-all` from vzdump-to-HDD to PBS
+- USB SSD repurposed as secondary datastore with sync job
+
+**PBS 4.2 features (April 2026) that change the design:**
+- **Native S3 object storage backend** — datastore can be an S3-compat
+  bucket (R2, Wasabi, B2). Reduces dependency on local disk; if the
+  PBS-host node dies, backups survive in S3.
+- **Server-side encryption in push sync jobs** — snapshots encrypted
+  before leaving for the secondary datastore. Useful for untrusted
+  off-site targets.
+- **Improved multi-datastore sync** — PBS-in-LXC + USB SSD as secondary
+  becomes a native config, no rsync wrapper needed.
+
+**Revised plan**: PBS in LXC on `pve01`, primary datastore on R2 (or
+MinIO in a sibling LXC), secondary copy to USB SSD with server-side
+encryption. Closes gaps 1, 2, 3 from above in one move.
 
 ## Mental model for what to back up
 

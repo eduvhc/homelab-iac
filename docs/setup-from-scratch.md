@@ -287,19 +287,11 @@ AUTO_APPROVE=1 tools/destroy.sh  # scripted (no prompt)
 After destroy, `tools/apply.sh` recreates everything against the same R2
 state (which is now empty).
 
-## Backup target (PVE host setup, not iac/)
+## Backups
 
-`vzdump` writes to a `backup` storage. On fresh PVE you need to:
-
-1. Plug a USB SSD or use a permanent disk.
-2. `mkfs.ext4 -L backup /dev/sdX1` (partition first if needed).
-3. Add to fstab using UUID with `nofail,x-systemd.device-timeout=10s,noatime`.
-4. `pvesm add dir backup --path /mnt/pve/backup --content backup,iso,vztmpl --is_mountpoint 1`.
-5. Confirm the daily `daily-all` vzdump job exists in `/etc/pve/jobs.cfg`.
-
-See `docs/backups.md` for the full backup strategy (what's covered,
-restore procedures, known gaps) and `docs/3-node-plan.md` for the
-longer-term PBS 4.2 migration.
+Initial PVE backup-target setup, current vzdump strategy, restore
+procedures, disaster scenarios, and the planned PBS migration all live
+in **`docs/backups.md`**. Do everything backup-related from there.
 
 ## Day-2 operations
 
@@ -337,14 +329,6 @@ services/coolify/rotate-token.sh` to mint a fresh token and write it to
 machines. There is no auto-cron. The script is operator-driven (it
 commits via git, which needs a human-supervised push).
 
-**Lost the age private key.** Catastrophic. Without it the encrypted
-secrets file is unreadable. Restore from the backup in your personal
-password manager. As a last resort, create a new age key, generate a fresh
-sops file via `tools/seed-secrets.sh` + `sops` (template flow), then
-re-encrypt all tofu state (`tofu init -migrate-state` after editing the
-encryption block to use the old → new passphrase mapping).
-
-**Corrupted R2 state.** `aws s3 cp s3://homelab-iac-state/infra/terraform.tfstate /backup/`
-should be a daily cron (TODO, not yet implemented, candidate for
-`iac/cron.yaml`). For now, the only safety net is OpenTofu's encryption
-plus R2's 24h soft-delete window.
+**Lost the age private key / corrupted R2 state / LXC needs restoring.**
+See `docs/backups.md` (sections "Restore secrets", "Restore tofu state",
+"Restore an entire LXC", "Disaster scenarios").

@@ -54,21 +54,10 @@ When new PVE nodes arrive (see `3-node-plan.md`):
 - `coolify-runner-NN` instances spread across `pve01` and `pve02` for
   capacity. `pve03` can host a runner as a tertiary if needed.
 
-## PVE storages
+## PVE storages and backups
 
-| Name | Backing | Path | Content | Notes |
-|------|---------|------|---------|-------|
-| local | Internal SSD M.2 | /var/lib/vz | import, iso, vztmpl | Default |
-| local-lvm | Internal SSD M.2 (LVM-thin) | /dev/pve/data | rootdir, images | Primary disk store for LXCs/VMs |
-| backup | USB SSD (Samsung 860 EVO 500GB) | /mnt/pve/backup | backup, iso, vztmpl, images, rootdir, snippets | vzdump target |
-
-The Seagate ST2000LM007 HDD (SMR) was originally mounted as the backup
-target, but UAS + SMR caused journal aborts under sustained writes. It is
-still plugged in physically but removed from the storage config and
-fstab. When real hardware arrives, PBS on a dedicated machine becomes the
-backup target and the HDD is retired entirely.
-
-See `docs/backups.md` for what is backed up and how to restore.
+Storage layout (including the `backup` target) and the full backup
+strategy live in **`docs/backups.md`**.
 
 
 ## LXCs as code (bpg/proxmox, data-driven from YAML)

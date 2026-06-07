@@ -9,8 +9,9 @@ Documento vivo. Atualizar à medida que os specs reais das 2 novas máquinas for
 | PVE 9.2.3 | Beelink N100, 16 GB, SSD M.2 512 GB | OK, hardened |
 | Coolify LXC 200 | local-lvm, 4c/6G/60G | tunnel CF ativo |
 | Ops LXC 101 | local-lvm, 2c/512M/10G | tofu + sops + git |
-| Backups | HDD USB 2 TB SMR, vzdump diário | SMR é o teto. OK para dev/lab |
 | Tunnel CF | 1 réplica no LXC 200 | 4 conns ao edge |
+
+Backups (vzdump atual + plano PBS futuro): ver `docs/backups.md`.
 
 ## Pressupostos das 2 novas máquinas
 
@@ -50,22 +51,9 @@ Quatro opções, em ordem de complexidade:
 
 ### C. Backup target
 
-**Recomendação: PBS 4.2 dedicado num dos 3 nodes (LXC ou VM).**
-
-- Substitui o vzdump-para-USB. Dedupe ~10-20× em VMs parecidas.
-- LXC simples (oficialmente VM mas a comunidade usa LXC em homelab há anos)
-- Datastore num SSD/NVMe (não no HDD SMR que tens!)
-- O HDD USB sobrevive como **cópia secundária offline** (sync periódico do PBS para lá)
-
-PBS num **4º** dispositivo seria mais correcto (sobrevive à perda do host onde corre), mas tu ainda tens o Beelink + USB como "off-site improvisado".
-
-**Novidades PBS 4.2 (Abr 2026) que mudam o desenho:**
-
-- **Native S3 object storage backend**: o datastore pode ser um bucket S3-compat (MinIO local, Wasabi, Backblaze B2). Reduz a dependência do disco local do node onde PBS corre. Se esse node morrer, o backup sobrevive no S3.
-- **Server-side encryption em push sync jobs**: ao replicar para um segundo PBS (ou para o HDD USB como datastore secundário), os snapshots são encriptados antes do envio. Útil para o teu "off-site improvisado" sem confiar no destino.
-- **Improved multi-datastore sync**: configurar PBS-no-LXC + cópia para HDD USB como segundo datastore com sync agendado fica nativo, sem rsync à parte.
-
-**Plano revisto**: PBS num LXC em `pve01` com datastore principal num bucket MinIO (correr MinIO noutro LXC ou usar o do Coolify), e cópia secundária para o HDD USB com server-side encryption.
+Decisão e plano completo em `docs/backups.md` (secção "Future: PBS 4.2
+migration"). TL;DR: PBS 4.2 em LXC no `pve01`, datastore primário S3-compat,
+cópia secundária no USB SSD com server-side encryption.
 
 ### D. Roles dos nodes
 
@@ -121,12 +109,9 @@ pvecm add <IP_do_primeiro> --link0 <ip_local>
 - [ ] Em cada node novo, criar pool ZFS no 2º disco: `zpool create -o ashift=12 tank /dev/nvme1n1`
 - [ ] Em PVE: Datacenter → Storage → Add ZFS → pool `tank`, content `images, rootdir`
 - [ ] Optional: enable replication entre nodes (Datacenter → Replication). Async, RPO 15 min default
-- [ ] Setup PBS:
-  - Cria LXC `pbs` em `pve01`, Debian 13, 2c/4G/100G (ou maior)
-  - Datastore num dataset ZFS dedicado: `zfs create tank/pbs-store`
-  - `apt install proxmox-backup-server`, configura datastore via UI
-  - Adiciona como storage `pbs-main` no datacenter PVE
-  - Migra job `daily-all` do vzdump-para-HDD para PBS
+- [ ] Setup PBS (ver `docs/backups.md` → "Future: PBS 4.2 migration"
+      para o plano detalhado: LXC, datastore, sync para USB SSD, migração
+      do job `daily-all`).
 
 ### Fase 4: Day 3: migrar Coolify + ops
 
