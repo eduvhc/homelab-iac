@@ -118,6 +118,29 @@ Without these perms set correctly, Lidarr / slskd / ytdl-sub will
 fail with permission-denied on first write — and the failure mode is
 silent enough to debug for hours.
 
+## Adding artists (the only remaining manual step)
+
+Everything else is automated — adding an artist in the UI is the **only**
+click that's still on you. Two gotchas Lidarr's UI doesn't make obvious:
+
+1. **Tick "Search for missing albums" when adding the artist.** By
+   default Lidarr only fetches metadata + monitors going forward — its
+   RSS sync looks for *new* releases, not backfill of the discography.
+   Old albums sit at 0/N tracks forever until you trigger a search.
+
+2. **Already added without ticking it?** Hit the magnifying-glass icon
+   next to each album, or trigger a discography search via API:
+
+   ```sh
+   ssh root@<lidarr-ip> 'set -a; . /etc/lidarr-stack/secrets.env; \
+     curl -s -X POST -H "X-Api-Key: $LIDARR_API_KEY" \
+       -H "Content-Type: application/json" \
+       http://127.0.0.1:8686/api/v1/command \
+       -d "{\"name\":\"ArtistSearch\",\"artistId\":<ID>}"'
+   ```
+
+   (Artist ID is visible in the URL when viewing the artist in the UI.)
+
 ## One-time post-deploy setup
 
 After the first `tools/apply.sh` brings up LXCs 105 and 106:
