@@ -1,0 +1,16 @@
+# Bootstrap spec for the coolify-runner-01 LXC. Just installs Docker so
+# Coolify can SSH-deploy apps here.
+
+apt:
+  packages: [curl, ca-certificates]
+
+commands:
+  - if_missing_cmd: docker
+    shell: |
+      curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+      sh /tmp/get-docker.sh
+      rm -f /tmp/get-docker.sh
+
+systemd:
+  enable: [docker]
+  start: [docker]

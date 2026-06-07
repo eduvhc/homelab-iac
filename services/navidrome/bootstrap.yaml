@@ -1,0 +1,37 @@
+# Declarative one-time install spec for the navidrome LXC. The Go engine at
+# tools/lib/cmd/bootstrap emits an idempotent shell script from this; the
+# script is ssh-piped into `sh -s` on the target by tools/apply.sh.
+#
+# Replaces the per-service bootstrap.sh.
+
+apt:
+  packages: [curl, ca-certificates, jq, tar, sqlite3, gettext-base]
+
+binaries:
+  - name: navidrome
+    github_repo: navidrome/navidrome
+    # Asset name pattern: navidrome_<v-stripped>_linux_amd64.tar.gz.
+    asset_template: "navidrome_{tag_num}_linux_amd64.tar.gz"
+    extract: navidrome
+    dest: /usr/local/bin/navidrome
+    mode: "0755"
+
+users:
+  - name: navidrome
+    system: true
+    no_create_home: true
+    shell: /usr/sbin/nologin
+    home: /var/lib/navidrome
+
+dirs:
+  - {path: /etc/navidrome,                owner: navidrome:navidrome, mode: "0750"}
+  - {path: /var/lib/navidrome,            owner: navidrome:navidrome, mode: "0750"}
+  - {path: /var/lib/navidrome/backups,    owner: navidrome:navidrome, mode: "0750"}
+  # /var/lib/navidrome/music is a separate mp0 volume (defined in lxc.yaml);
+  # this `install -d` is defensive — the mount point exists at first boot
+  # as root:root, we re-set perms here so navidrome can write.
+  - {path: /var/lib/navidrome/music,      owner: navidrome:navidrome, mode: "0755"}
+
+systemd:
+  daemon_reload: true
+  enable: [navidrome]

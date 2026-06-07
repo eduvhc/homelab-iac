@@ -60,8 +60,25 @@ ensure_apt_pkg() {
   DEBIAN_FRONTEND=noninteractive apt-get update -qq
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$2"
 }
-# Go is needed by tools/lib/cmd/{assemble-crons,sync} (phase 3, 8).
+# Go is needed by the engines under tools/lib/cmd/ (phases 3, 4, 8).
 ensure_apt_pkg go golang-go
+
+# bootstrap_service SVC [IP] [ENV...] — emit the install script from
+# services/<SVC>/bootstrap.yaml and ssh-pipe it to the target. If IP is
+# omitted, defaults to $(ip_of <basename of SVC>) — works for top-level
+# services with matching network/ips.yaml keys. Extra ENV args (e.g.
+# "TUNNEL_TOKEN=$TUNNEL_TOKEN") are passed through to the remote shell.
+bootstrap_service() {
+  _svc=$1; _ip=${2:-}; shift 2 2>/dev/null || shift
+  [ -n "$_ip" ] || _ip=$(awk -v want="${_svc##*/}" '
+    /^services:/ { in_svc = 1; next }
+    /^[^[:space:]]/ { in_svc = 0 }
+    in_svc && $1 == want":" { print $2; exit }
+  ' "$REPO_ROOT/network/ips.yaml")
+  [ -n "$_ip" ] || die "bootstrap_service: could not resolve IP for $_svc"
+  (cd "$REPO_ROOT/tools/lib" && go run ./cmd/bootstrap "$REPO_ROOT/services/$_svc/bootstrap.yaml") \
+    | ssh root@"$_ip" "$* sh -s"
+}
 
 # sync_service SVC — invoke the declarative sync engine against
 # services/<SVC>/sync.yaml if it exists. Caller must have already sourced
@@ -97,32 +114,33 @@ done
 # ── 3. Per-service bootstraps ───────────────────────────────────────────────
 log_step "3/8" "bootstrap service LXCs"
 
-log_info "adguard ($IP_ADGUARD): install AGH binary"
-ssh root@"$IP_ADGUARD" 'sh -s' < "$REPO_ROOT/services/adguard/ops/bootstrap.sh"
+log_info "adguard ($IP_ADGUARD): bootstrap"
+bootstrap_service adguard "$IP_ADGUARD"
 sync_service adguard
 
-log_info "gateway ($IP_GATEWAY): install Caddy + Authelia + generate OIDC keys"
-ssh root@"$IP_GATEWAY" 'sh -s' < "$REPO_ROOT/services/gateway/ops/bootstrap.sh"
-# authelia/sync.sh is hybrid: argon2id hash logic in shell, file render+push
-# delegated to the sync engine via services/gateway/authelia/sync.yaml.
+log_info "gateway ($IP_GATEWAY): bootstrap (Caddy + Authelia + secrets + RSA pair)"
+bootstrap_service gateway "$IP_GATEWAY"
+# authelia/ops/sync.sh is hybrid: argon2id hash logic in shell, file
+# render+push delegated to the sync engine via authelia/sync.yaml.
 [ -x "$REPO_ROOT/services/gateway/authelia/ops/sync.sh" ] && "$REPO_ROOT/services/gateway/authelia/ops/sync.sh"
 sync_service gateway/caddy
 
-log_info "coolify-runner-01 ($IP_RUNNER): install Docker"
-ssh root@"$IP_RUNNER" 'sh -s' < "$REPO_ROOT/services/coolify-runner-01/scripts/bootstrap.sh"
+log_info "coolify-runner-01 ($IP_RUNNER): bootstrap (Docker)"
+bootstrap_service coolify-runner-01 "$IP_RUNNER"
 
-log_info "navidrome ($IP_NAVIDROME): install Navidrome binary"
-ssh root@"$IP_NAVIDROME" 'sh -s' < "$REPO_ROOT/services/navidrome/ops/bootstrap.sh"
+log_info "navidrome ($IP_NAVIDROME): bootstrap"
+bootstrap_service navidrome "$IP_NAVIDROME"
 sync_service navidrome
 
 # ── 4. Cloudflared HA pair ──────────────────────────────────────────────────
 log_step "4/8" "install cloudflared connectors (Coolify + runner replica for HA)"
 TUNNEL_TOKEN=$(cd "$INFRA_DIR" && tofu output -raw tunnel_token)
 # Same tunnel, two connectors → 8 outbound connections across 2 LXCs.
+# bootstrap_service emits the install script + ssh-pipes; we prepend
+# TUNNEL_TOKEN so the FileWrite directive can read it from env.
 for host in "$IP_COOLIFY" "$IP_RUNNER"; do
   log_info "cloudflared on $host"
-  ssh root@"$host" "TUNNEL_TOKEN=$TUNNEL_TOKEN sh -s" \
-    < "$REPO_ROOT/services/cloudflared/ops/install.sh"
+  bootstrap_service cloudflared "$host" "TUNNEL_TOKEN=$TUNNEL_TOKEN"
 done
 
 # ── 5. Coolify (split into 3 idempotent steps for SRP) ──────────────────────

@@ -99,20 +99,31 @@ Every `services/<svc>/` follows the same shape. Folder names describe
 
 ```
 services/<svc>/
-├── *.yaml             ← manifests (control plane: lxc, sync, backups,
-│                       cron, tunnel-routes) — discovered by tofu/Go
-│                       assemblers via fileset/glob
+├── lxc.yaml           ← PVE container spec (discovered by tofu fileset)
+├── tunnel-routes.yaml ← optional: Cloudflare tunnel ingress (tofu fileset)
+├── bootstrap.yaml     ← one-time install spec (Go engine: cmd/bootstrap)
+├── sync.yaml          ← config render+push spec (Go engine: cmd/sync)
+├── backups.yaml       ← inner-backup spec (assemble-crons → run.sh)
+├── cron.yaml          ← optional: extra cron entries (assemble-crons)
 ├── target/            ← anything that ends up ON the LXC
 │                       (config templates, systemd units, future
 │                       migrations / assets / fixtures / on-target hooks)
-│                       Rendered/pushed by the sync engine — src paths
-│                       in sync.yaml are relative to the service dir.
-└── ops/               ← scripts run BY operator or apply.sh
-                        (bootstrap, hybrid sync, installers, rotaters)
+└── ops/               ← shell scripts run BY operator or apply.sh
+                        (only when a declarative directive doesn't fit —
+                        e.g. PHP tinker, secret-derived-secret, etc.)
 ```
 
 Sub-services (e.g. `services/gateway/{authelia,caddy}/`) follow the same
-recursive shape: their own `*.yaml` + `target/` + `ops/`.
+recursive shape.
+
+**Engines** that read these manifests:
+- `tofu` discovers `lxc.yaml` + `tunnel-routes.yaml` via `fileset()`
+- `tools/lib/cmd/bootstrap` emits idempotent install shell from `bootstrap.yaml`
+- `tools/lib/cmd/sync` renders + pushes from `sync.yaml`
+- `tools/lib/cmd/assemble-crons` builds `/etc/cron.d/iac` from
+  `cron.yaml` + `backups.yaml` + `iac/cron.yaml`
+
+`ops/` is the escape hatch — it exists when declarative doesn't (yet) fit.
 
 ### Adding a new LXC
 

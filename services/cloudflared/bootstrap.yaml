@@ -1,0 +1,42 @@
+# Bootstrap spec for the cloudflared connector. Runs on BOTH the coolify
+# and the coolify-runner-01 LXCs (apply.sh iterates per host). The same
+# tunnel token is shared — TUNNEL_TOKEN env var must be set in the ssh
+# environment when this script runs.
+#
+# Replaces the old services/cloudflared/ops/install.sh (95 lines of
+# imperative shell) with declarative directives. The "restart on token
+# or unit change" behavior is now expressed by `restart_on_change:` on
+# each file directive.
+
+apt:
+  repos:
+    - name: cloudflared
+      keyring_url: https://pkg.cloudflare.com/cloudflare-main.gpg
+      keyring_dest: /usr/share/keyrings/cloudflare-main.gpg
+      deb_line: "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared bookworm main"
+  packages: [cloudflared]
+
+dirs:
+  - {path: /etc/cloudflared, mode: "0700"}
+
+files:
+  # Token file: mode 0600 (only root reads it). Restart on change so a
+  # rotated token from `tofu apply` propagates without a manual kick.
+  - dest: /etc/cloudflared/token
+    content_from_env: TUNNEL_TOKEN
+    owner: root:root
+    mode: "0600"
+    restart_on_change: cloudflared.service
+
+  # Systemd unit: hardened, reads token via --token-file (NOT argv). The
+  # engine emits a `systemctl daemon-reload` automatically because the
+  # path matches /etc/systemd/system/*.service.
+  - dest: /etc/systemd/system/cloudflared.service
+    src: target/cloudflared.service
+    owner: root:root
+    mode: "0644"
+    restart_on_change: cloudflared.service
+
+systemd:
+  enable: [cloudflared]
+  start: [cloudflared]

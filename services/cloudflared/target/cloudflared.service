@@ -1,0 +1,21 @@
+[Unit]
+Description=Cloudflare Tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+# --token-file (not the legacy `cloudflared service install <token>`) so
+# the token never appears in argv where `ps` could see it.
+ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel --protocol quic run --token-file /etc/cloudflared/token
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

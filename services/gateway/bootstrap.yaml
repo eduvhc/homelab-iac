@@ -1,0 +1,68 @@
+# Bootstrap spec for the gateway LXC (Caddy + Authelia).
+
+apt:
+  repos:
+    - name: caddy-stable
+      keyring_url: https://dl.cloudsmith.io/public/caddy/stable/gpg.key
+      keyring_dest: /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+      deb_line: "deb [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main"
+  packages:
+    - curl
+    - ca-certificates
+    - gnupg
+    - jq
+    - sqlite3                      # for tools/lib/backups/sqlite.sh
+    - debian-keyring
+    - debian-archive-keyring
+    - apt-transport-https
+    - caddy
+
+binaries:
+  - name: authelia
+    github_repo: authelia/authelia
+    # Asset name pattern: authelia-<full-tag-with-v>-linux-amd64.tar.gz
+    asset_template: "authelia-{tag}-linux-amd64.tar.gz"
+    extract: authelia
+    dest: /usr/local/bin/authelia
+    mode: "0755"
+
+users:
+  - name: authelia
+    system: true
+    no_create_home: true
+    shell: /usr/sbin/nologin
+
+dirs:
+  - {path: /etc/authelia,     owner: authelia:authelia, mode: "0750"}
+  - {path: /var/lib/authelia, owner: authelia:authelia, mode: "0750"}
+  - {path: /var/log/authelia, owner: authelia:authelia, mode: "0750"}
+  # Caddy log dir: deb package creates the access.log file but not the dir
+  # if the dir is missing — be defensive.
+  - {path: /var/log/caddy,    owner: caddy:caddy,       mode: "0750"}
+
+random_secrets:
+  - dest: /etc/authelia/secrets.env
+    owner: authelia:authelia
+    mode: "0600"
+    if_missing: true
+    entries:
+      - {key: AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET, length: 64}
+      - {key: AUTHELIA_SESSION_SECRET,                                length: 64}
+      - {key: AUTHELIA_STORAGE_ENCRYPTION_KEY,                        length: 64}
+      - {key: AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET,           length: 80}
+
+commands:
+  # OIDC RSA pair for Authelia. `authelia crypto pair rsa generate` writes
+  # private.pem + public.pem — we rename to the names referenced in
+  # configuration.yml.tmpl (oidc-private.pem / oidc-public.pem).
+  - if_missing_file: /etc/authelia/oidc-private.pem
+    shell: |
+      /usr/local/bin/authelia crypto pair rsa generate --directory /etc/authelia/ >/dev/null
+      mv /etc/authelia/private.pem /etc/authelia/oidc-private.pem
+      mv /etc/authelia/public.pem  /etc/authelia/oidc-public.pem
+      chown authelia:authelia /etc/authelia/oidc-*.pem
+      chmod 640 /etc/authelia/oidc-*.pem
+
+systemd:
+  daemon_reload: true
+  enable: [caddy, authelia]

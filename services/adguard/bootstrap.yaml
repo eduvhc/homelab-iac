@@ -1,0 +1,16 @@
+# Bootstrap spec for the adguard LXC. Uses AGH's official curl|sh installer
+# (only thing they ship) via the `commands:` escape hatch.
+
+apt:
+  packages: [curl, ca-certificates, nftables, python3-yaml]
+
+commands:
+  # AdGuard's official install script: only installer they publish. Stop
+  # the service immediately — config is pushed by the sync engine
+  # (services/adguard/sync.yaml) before we want it serving DNS.
+  - if_missing_file: /opt/AdGuardHome/AdGuardHome
+    shell: |
+      curl -fsSL https://raw.githubusercontent.com/AdguardTeam/AdGuardHome/master/scripts/install.sh -o /tmp/install.sh
+      sh /tmp/install.sh -r >/dev/null
+      rm -f /tmp/install.sh
+      systemctl stop AdGuardHome
