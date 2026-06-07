@@ -54,4 +54,4 @@ else
 fi
 
 # ── Dispatch to the declarative sync engine ─────────────────────────────────
-cd "$REPO_ROOT/tools/lib/sync" && exec go run . "$REPO_ROOT/services/gateway/authelia/sync.yaml"
+cd "$REPO_ROOT/tools/lib" && exec go run ./cmd/sync "$REPO_ROOT/services/gateway/authelia/sync.yaml"

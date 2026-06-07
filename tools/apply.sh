@@ -60,7 +60,7 @@ ensure_apt_pkg() {
   DEBIAN_FRONTEND=noninteractive apt-get update -qq
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$2"
 }
-# Go is needed by tools/lib/assemble-crons + tools/lib/sync (phase 3, 8).
+# Go is needed by tools/lib/cmd/{assemble-crons,sync} (phase 3, 8).
 ensure_apt_pkg go golang-go
 
 # sync_service SVC — invoke the declarative sync engine against
@@ -69,7 +69,7 @@ ensure_apt_pkg go golang-go
 sync_service() {
   _yaml="$REPO_ROOT/services/$1/sync.yaml"
   [ -f "$_yaml" ] || return 0
-  (cd "$REPO_ROOT/tools/lib/sync" && go run . "$_yaml")
+  (cd "$REPO_ROOT/tools/lib" && go run ./cmd/sync "$_yaml")
 }
 
 # ── 1. Infra ────────────────────────────────────────────────────────────────
@@ -159,7 +159,7 @@ if (\$s) { \$s->validateDockerEngine(); }
 log_step "8/8" "sync ops LXC cron jobs (assembled from iac/cron.yaml + services/*/cron.yaml)"
 TMP_CRON=$(mktemp)
 trap 'rm -f "$TMP_CRON"' EXIT
-(cd "$REPO_ROOT/tools/lib/assemble-crons" && go run . "$REPO_ROOT") > "$TMP_CRON"
+(cd "$REPO_ROOT/tools/lib" && go run ./cmd/assemble-crons "$REPO_ROOT") > "$TMP_CRON"
 
 install -d -m 0755 /etc/cron.d
 if ! cmp -s "$TMP_CRON" /etc/cron.d/iac 2>/dev/null; then
