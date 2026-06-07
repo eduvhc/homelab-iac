@@ -60,6 +60,19 @@ fi
 
 api() { curl -fsS -H "X-Api-Key: $LIDARR_API_KEY" -H 'Content-Type: application/json' "$@"; }
 
+# ── Root folder: /srv/media/music ───────────────────────────────────────────
+# Where Lidarr imports completed downloads. Same FS as the slskd download
+# dir (/srv/media/_incoming) → imports are rename(), not cross-device copy.
+# Schema: references/Lidarr/src/Lidarr.Api.V1/RootFolders/RootFolderResource.cs
+if api http://127.0.0.1:8686/api/v1/rootfolder | \
+   jq -e '.[] | select(.path == "/srv/media/music")' >/dev/null; then
+  echo "root folder /srv/media/music: already present (skip)"
+else
+  echo "root folder /srv/media/music: creating…"
+  api -X POST http://127.0.0.1:8686/api/v1/rootfolder -d \
+    '{"path":"/srv/media/music","name":"Music"}' >/dev/null
+fi
+
 # ── Indexer: Slskd ──────────────────────────────────────────────────────────
 if api http://127.0.0.1:8686/api/v1/indexer | \
    jq -e '.[] | select(.implementation == "SlskdIndexer")' >/dev/null; then
