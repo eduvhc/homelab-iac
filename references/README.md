@@ -36,5 +36,7 @@ tools/fetch-references.sh coolify
 | bitwarden-sdk-sm                     | main   | bws CLI in LXC 101 |
 | authelia                             | master | LXC 103 |
 | caddy                                | master | LXC 103 |
+| navidrome                            | master | LXC 104 (music server) |
+| bbolt                                | main   | AdGuard stats.db (verifying online-backup feasibility — see docs/backups.md) |
 
 All clones are shallow (`--depth=1`) against the listed branch.

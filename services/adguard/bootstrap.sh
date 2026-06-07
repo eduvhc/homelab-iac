@@ -6,9 +6,7 @@ set -e
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-# sqlite3 is needed by services/adguard/backup-sqlite.sh (online .backup
-# of stats.db via the SQLite Backup API).
-apt-get install -y -qq curl ca-certificates nftables python3-yaml sqlite3
+apt-get install -y -qq curl ca-certificates nftables python3-yaml
 
 if [ -x /opt/AdGuardHome/AdGuardHome ]; then
   echo "AdGuardHome already installed"

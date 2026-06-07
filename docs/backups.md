@@ -140,7 +140,7 @@ Quick reference of what every LXC contributes to the backup story:
 | coolify (200)         | `services/coolify/backup-postgres.sh`              | pg_dump    | Coolify source DB (projects, deploys)  |
 | gateway (103)         | `services/gateway/authelia/backup-sqlite.sh`       | sqlite3    | Authelia DB (TOTP, sessions, audit)    |
 | navidrome (104)       | `services/navidrome/backup-sqlite.sh`              | sqlite3    | Navidrome DB (users, ratings, scrobbles) |
-| adguard (102)         | `services/adguard/backup-sqlite.sh`                | sqlite3    | AdGuard stats.db (DNS history)         |
+| adguard (102)         | —                                                  | —          | BoltDB + flock blocks online dump; vzdump only (see below) |
 | coolify-runner-01 (210) | —                                                | —          | Pure Docker host; per-app future       |
 | ops (101)             | —                                                  | —          | Rootfs covered by vzdump               |
 
@@ -259,7 +259,7 @@ chown authelia:authelia /var/lib/authelia/db.sqlite3
 systemctl start authelia
 ```
 
-### AdGuard — sqlite3 .backup of stats.db + vzdump
+### AdGuard — vzdump only (no inner backup possible)
 
 AdGuard's state is split:
 - `AdGuardHome.yaml` — DNS settings, rewrites, filter URLs, users.
@@ -267,29 +267,46 @@ AdGuard's state is split:
   rendered by `sync.sh` from sops on every apply. vzdump captures the
   rendered file; git has the source.
 - `data/stats.db` — months of DNS query history, blocked counts, top
-  domains. **Not trivially reproducible.** Backed up.
-- `data/sessions.db` — login sessions, ephemeral; skipped.
-- `data/filters/` — re-downloaded from upstream URLs; skipped.
+  domains. **BoltDB** (not SQLite).
+- `data/sessions.db` — login sessions, ephemeral.
+- `data/filters/` — re-downloaded from upstream URLs.
 
-```
-services/adguard/backup-sqlite.sh    runs from ops
-  └─ uses tools/backups/lib/sqlite.sh    sqlite3 .backup + PRAGMA integrity_check
-  └─ uses tools/backups/lib/retention.sh keep-last-N rotation
-  └─ scheduled in services/adguard/cron.yaml at 02:50 UTC
+**No inner backup script exists** for AdGuard, and (after investigation)
+none can be added with our online-backup-no-downtime constraint. Why:
 
-Output: root@adguard:/var/lib/adguard/backups/adguard-stats-<UTC-ts>.sqlite3
-Retention: keep last 14 dumps
-```
+- AdGuard opens stats.db with `bbolt.Open(filename, perm, nil)` — `nil`
+  options means writer mode, which acquires a POSIX **LOCK_EX** on the
+  file descriptor and holds it for the entire process lifetime.
+  (`references/AdGuardHome/internal/stats/stats.go`)
+- `bbolt compact` (the canonical online backup tool for BoltDB) opens
+  the source as `bolt.Options{ReadOnly: true}`, which acquires
+  **LOCK_SH**. (`references/bbolt/cmd/bbolt/command/command_compact.go`)
+- POSIX LOCK_SH is incompatible with LOCK_EX → `bbolt compact` blocks
+  indefinitely (default timeout=0) or fails. Confirmed: `lsof` shows
+  AdGuard holding the file with FD mode `uW` (write-locked).
+  (`references/bbolt/bolt_unix.go::flock`)
 
-**Restore stats history**:
-```bash
-# On the AdGuard LXC
-systemctl stop AdGuardHome
-LATEST=$(ls -t /var/lib/adguard/backups/adguard-stats-*.sqlite3 | head -1)
-cp "$LATEST" /opt/AdGuardHome/data/stats.db
-chmod 600 /opt/AdGuardHome/data/stats.db
-systemctl start AdGuardHome
-```
+There is no way to take a clean inner snapshot without stopping
+AdGuard, which would interrupt LAN DNS resolution. Two reasons that's
+acceptable:
+
+1. **BoltDB is transaction-safe at the filesystem level.** Writes go
+   through copy-on-write pages with an atomic 16-byte meta-page swap.
+   A vzdump snapshot captures the file at one instant; on next open
+   BoltDB sees a consistent meta page and any in-flight pages from an
+   incomplete transaction are simply unreferenced. No corruption.
+2. **The stats are nice-to-have, not load-bearing.** Restored history
+   may be ≤24h stale (vzdump cadence). The AdGuard config — the
+   load-bearing part — is reconstructed from git on disaster restore
+   regardless.
+
+AdGuard also exposes `GET /stats` returning aggregated JSON. That is
+useful for long-term archival/auditing into an external time-series
+store, but it's not a restorable DB dump and is orthogonal to the
+backup story.
+
+**Restore is just `pct restore` of the whole LXC** — the `data/stats.db`
+file inside is recovered as-is, BoltDB handles the rest on next open.
 
 ### Caddy / cloudflared / coolify-runner-01 — no state to inner-back
 

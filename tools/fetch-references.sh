@@ -28,7 +28,9 @@ age	https://github.com/FiloSottile/age.git	main
 coolify	https://github.com/coollabsio/coolify.git	v4.x
 authelia	https://github.com/authelia/authelia.git	master
 caddy	https://github.com/caddyserver/caddy.git	master
-coolify-docs	https://github.com/coollabsio/coolify-docs.git	v4.x'
+coolify-docs	https://github.com/coollabsio/coolify-docs.git	v4.x
+navidrome	https://github.com/navidrome/navidrome.git	master
+bbolt	https://github.com/etcd-io/bbolt.git	main'
 
 # Resolve repo root relative to this script so it works from any cwd.
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
