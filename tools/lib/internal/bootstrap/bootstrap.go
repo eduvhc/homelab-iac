@@ -31,6 +31,7 @@ type Manifest struct {
 	Host    string         `yaml:"host"`
 	APT     APT            `yaml:"apt,omitempty"`
 	Binary  []Binary       `yaml:"binaries,omitempty"`
+	Groups  []Group        `yaml:"groups,omitempty"`
 	Users   []User         `yaml:"users,omitempty"`
 	Dirs    []Dir          `yaml:"dirs,omitempty"`
 	Files   []FileWrite    `yaml:"files,omitempty"`
@@ -70,13 +71,26 @@ type Binary struct {
 	Mode           string `yaml:"mode,omitempty"`
 }
 
-// User creates a system user (useradd) if absent.
+// Group creates a system group (groupadd) if absent. If GID is set, the
+// group is pinned to that ID — required for shared groups whose GID must
+// match a host-side ACL (e.g. unprivileged-LXC media bind-mounts where the
+// host dir is owned by 100000:165000 and every container's `media` group
+// must resolve to GID 65000 → host 165000).
+type Group struct {
+	Name string `yaml:"name"`
+	GID  int    `yaml:"gid,omitempty"`
+}
+
+// User creates a system user (useradd) if absent. ExtraGroups adds the
+// user to additional groups (idempotent — re-running just keeps the
+// membership set).
 type User struct {
-	Name         string `yaml:"name"`
-	System       bool   `yaml:"system,omitempty"`
-	NoCreateHome bool   `yaml:"no_create_home,omitempty"`
-	Shell        string `yaml:"shell,omitempty"`
-	Home         string `yaml:"home,omitempty"`
+	Name         string   `yaml:"name"`
+	System       bool     `yaml:"system,omitempty"`
+	NoCreateHome bool     `yaml:"no_create_home,omitempty"`
+	Shell        string   `yaml:"shell,omitempty"`
+	Home         string   `yaml:"home,omitempty"`
+	ExtraGroups  []string `yaml:"extra_groups,omitempty"`
 }
 
 // Dir is a mkdir+chown+chmod (uses `install -d`).
@@ -165,6 +179,11 @@ func (m Manifest) Validate() error {
 	for i, b := range m.Binary {
 		if b.Name == "" || b.GithubRepo == "" || b.AssetTemplate == "" || b.Dest == "" {
 			return fmt.Errorf("binaries[%d]: name, github_repo, asset_template, dest all required", i)
+		}
+	}
+	for i, g := range m.Groups {
+		if g.Name == "" {
+			return fmt.Errorf("groups[%d]: name required", i)
 		}
 	}
 	for i, u := range m.Users {

@@ -14,3 +14,5 @@ services:
   coolify:            192.168.50.200
   coolify-runner-01:  192.168.50.210
   navidrome:          192.168.50.220
+  lidarr:             192.168.50.221
+  ytdl-sub:           192.168.50.222

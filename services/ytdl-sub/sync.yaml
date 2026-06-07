@@ -1,0 +1,28 @@
+# Declarative sync spec for the ytdl-sub LXC. The subscriptions.yaml IS
+# the service configuration — change there and the next apply rolls it
+# out. No restart needed; the timer fires the oneshot which re-reads the
+# file on every run.
+
+host: ytdl-sub
+
+files:
+  - src: target/subscriptions.yaml
+    dest: /etc/ytdl-sub/subscriptions.yaml
+    owner: ytdl-sub:ytdl-sub
+    mode: "0640"
+    # No on_change — next timer fire picks up the new config naturally.
+
+  - src: target/ytdl-sub.service
+    dest: /etc/systemd/system/ytdl-sub.service
+    mode: "0644"
+    on_change:
+      - daemon_reload: true
+
+  - src: target/ytdl-sub.timer
+    dest: /etc/systemd/system/ytdl-sub.timer
+    mode: "0644"
+    on_change:
+      - daemon_reload: true
+      - restart: ytdl-sub.timer
+
+verify_active: ytdl-sub.timer

@@ -3,14 +3,19 @@
 #
 # Storage layout (state vs media separation — canonical pattern for media
 # servers, see docs/3-node-plan.md and Navidrome backup docs):
-#   rootfs (disk_gb)         → binary, config, SQLite DB, Navidrome's own
-#                              DB backups in /var/lib/navidrome/backups
-#                              → included in vzdump
-#   mp0 (mount_points[0])    → /var/lib/navidrome/music (FLAC library)
-#                              → backup: false (excluded from vzdump)
-# Music is a reproducible asset (ripped/purchased originals exist elsewhere);
-# what cannot be lost is the DB (ratings, playlists, scrobbles), which
+#   rootfs (disk_gb)  → binary, config, SQLite DB, Navidrome's own DB
+#                       backups in /var/lib/navidrome/backups
+#                       → included in vzdump
+#   mp0 (bind mount)  → /var/lib/navidrome/media → /srv/media (host)
+#                       Shared with services/lidarr/ + services/ytdl-sub/.
+#                       Contents are reproducible (ripped originals exist
+#                       elsewhere) → not in vzdump.
+# What cannot be lost is the DB (ratings, playlists, scrobbles), which
 # Navidrome backs up natively to rootfs on a schedule.
+#
+# Library layout: /srv/media/music (Lidarr-managed FLAC) and
+# /srv/media/youtube (ytdl-sub-managed) appear as two libraries in
+# Navidrome via the [[Libraries]] block in target/navidrome.toml.tmpl.
 
 vm_id: 104
 hostname: navidrome
@@ -24,6 +29,5 @@ features:
   nesting: false
   keyctl: false
 mount_points:
-  - path: /var/lib/navidrome/music
-    size_gb: 50
-    backup: false
+  - path: /var/lib/navidrome/media
+    host_path: /srv/media

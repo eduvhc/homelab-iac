@@ -1,0 +1,12 @@
+[Unit]
+Description=ytdl-sub daily sync
+
+[Timer]
+# Daily at 04:00 local — avoids competing with the SQLite backups window
+# (services/*/backups.yaml fires at 02:50–02:55).
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

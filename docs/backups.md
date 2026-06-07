@@ -150,7 +150,7 @@ anything** (operators add/remove disks without updating docs).
 | Device | Size | Type | Model | Where it's mounted | What it's for |
 |---|---|---|---|---|---|
 | **`sda`** | 477 GB | NVMe SSD (internal) | "512GB SSD" (M.2) | `pve` LVM VG (root + swap + thin pool) | **System disk** — PVE itself + all LXC volumes (`local-lvm`). Do not touch outside of provisioning. |
-| **`sdb`** | 1.8 TB | SATA HDD via USB (SMR — Seagate ST2000LM007) | "Generic" / ST2000LM007 | **NOT MOUNTED** (no fstab entry, no `pvesm` definition) | **Retired** as backup target — UAS + SMR caused journal aborts under sustained writes. Partition `sdb1` still carries a stale `backup` label (don't be misled). Available for repurposing — currently the candidate for shared media (in progress, see "Planned" below). |
+| **`sdb`** | 1.8 TB | SATA HDD via USB (SMR — Seagate ST2000LM007) | "Generic" / ST2000LM007 | `/srv/media` (ext4, label `media`) | **Shared media pool** — PVE storage `media`. Bind-mounted into navidrome (104), lidarr (105), and ytdl-sub (106) via host-path mount points. SMR is acceptable because writes are sequential (one file at a time, sparse cadence: Lidarr imports ~daily, ytdl-sub once/day) and reads dominate (Navidrome streaming). NOT a vzdump target — these are reproducible media files. |
 | **`sdc`** | 466 GB | SATA SSD via USB (Samsung 860 EVO) | "SSD 860 EVO" | `/mnt/pve/backup` (ext4, label `data`) | **Active backup target** — PVE storage `backup`. Receives `vzdump` daily tarballs + ISO/template uploads. `rotational=1` is the USB enclosure misreporting; the device is an SSD. |
 
 #### sda (system) — LVM layout under `pve` VG
@@ -163,7 +163,9 @@ pve-data        349 GB  → thin pool (local-lvm), holds:
   vm-102-disk-0     2 GB   adguard rootfs
   vm-103-disk-0     4 GB   gateway rootfs
   vm-104-disk-0     8 GB   navidrome rootfs
-  vm-104-disk-1    50 GB   navidrome music mp0 (backup=0)
+  vm-104-disk-1    50 GB   navidrome music mp0 (LEGACY — orphaned after
+                            2026-06 migration to sdb /srv/media; safe to
+                            `lvremove pve/vm-104-disk-1` once confirmed)
   vm-200-disk-0    60 GB   coolify rootfs
   vm-210-disk-0    30 GB   coolify-runner-01 rootfs
 ```
@@ -171,18 +173,32 @@ pve-data        349 GB  → thin pool (local-lvm), holds:
 Thin pool usage: ~17 GB / 349 GB (~5%). Plenty of headroom for now;
 review before adding more LXCs or larger mount points.
 
-#### sdb (retired HDD) — careful, NOT free
+#### sdb (shared media pool)
 
-- Filesystem: `ext4` on `sdb1`, label `backup` (left over from when it
-  was the vzdump target — predates `sdc`).
-- NOT in `/etc/fstab`. NOT in `pvesm status`. Not mounted at boot.
-- Spins up if probed but the SMR + USB-UAS combo makes it unsuitable
-  for write-heavy workloads (random writes stall, journal aborts under
-  sustained load).
-- **For agents/operators:** do NOT assume this disk is "free to use as
-  anything". Repurposing for shared media is the current plan but
-  hasn't been executed yet — confirm with the operator before
-  formatting / re-purposing / scripting against it.
+- Filesystem: `ext4` on `sdb1`, label `media`, UUID
+  `5bdf5044-92a9-43bb-af80-bb7b8784ee0d`.
+- fstab: `UUID=… /srv/media ext4 defaults,nofail 0 2` (nofail so a
+  spinning-disk hiccup doesn't block boot — the LXCs that bind into
+  it fail noisily instead of cascading into a stuck PVE).
+- PVE storage: `media` (`dir` type, `content rootdir`, `shared 0`).
+  The registration is for auditability + future per-container subvol
+  allocations; today nothing uses it as a managed pool — the LXCs
+  bind-mount the raw host path.
+- Subdirs:
+  - `/srv/media/music`     — Lidarr-managed FLAC. `2775 root:media`.
+  - `/srv/media/youtube`   — ytdl-sub-managed. `2775 root:media`.
+  - `/srv/media/_incoming` — slskd raw downloads → Lidarr imports
+                              into `music/` as renames (same FS).
+- Permissions model: host `media` group is GID 165000; inside each
+  unprivileged LXC the same group is GID 65000 (subuid mapping). The
+  service users (`navidrome`, `lidarr`, `slskd`, `soularr`,
+  `ytdl-sub`) are added to the `media` group during bootstrap; the
+  `2775` setgid bit ensures cross-LXC writes stay group-readable.
+- SMR caveat: write-heavy *concurrent* workloads (the original vzdump
+  use case) caused journal aborts. Current workload is single-writer
+  sequential (Lidarr finishes one album, then yields; ytdl-sub runs
+  daily) — well within SMR's tolerance window. Watch `dmesg | grep -i
+  "ata error\|journal"` if you see Lidarr import stalls.
 
 #### sdc (active backup target)
 
@@ -196,16 +212,13 @@ review before adding more LXCs or larger mount points.
 
 #### Planned / in progress
 
-- **Shared media disk** — operator is provisioning a separate mount
-  for shared media (FLAC library + future video / photos). Likely
-  re-purposing `sdb` (1.8 TB HDD) since SMR is acceptable for
-  sequential reads of finished media files (the journal-abort issue
-  was write-heavy backup workloads). Confirm with the operator before
-  documenting paths / mount options / which LXCs bind into it.
-- When mounted, update this section with: device + filesystem +
-  mountpoint + which LXC(s) bind into it + whether `vzdump` should
-  see it (almost certainly `backup=0` — same as
-  `/var/lib/navidrome/music`).
+- **Retire `pve/vm-104-disk-1`** — orphaned by the 2026-06 media
+  migration. Verify Navidrome reads from `/var/lib/navidrome/media/music`
+  for ≥ a week, then `lvremove pve/vm-104-disk-1` to reclaim ~50 GB
+  back into the thin pool.
+- **Video / photos libraries** — when adding, create `/srv/media/video`
+  and `/srv/media/photos` with the same `2775 root:media` perms and
+  bind into the corresponding LXC.
 
 ### What lives on the host that matters (and isn't in any LXC)
 
@@ -305,25 +318,36 @@ linearly, not the retention depth.
 
 `vzdump` does not deduplicate. A 100 GB music library would produce
 ~100 GB per snapshot — the USB SSD fills in 5 days. To avoid this, media
-services use **separate LVM volumes** that `vzdump` skips.
+services keep their large data **outside the rootfs** via mount points
+that `vzdump` skips.
 
-Declared centrally in `services/<svc>/lxc.yaml`:
+Two flavors, declared centrally in `services/<svc>/lxc.yaml`:
 
 ```yaml
-disk_gb: 8                                   # rootfs → vzdump captures
+# Flavor 1: per-container LVM-thin volume on local-lvm. Private to one
+# LXC. Used when data is per-LXC and the LXC owns its growth budget.
 mount_points:
-  - path: /var/lib/navidrome/music
-    size_gb: 50                              # mp0 → separate volume
-    backup: false                            # excluded from vzdump
+  - path: /var/lib/foo/data
+    size_gb: 50
+    backup: false
+
+# Flavor 2: bind-mount of a host path. Shared across LXCs trivially —
+# the same host_path can appear in multiple services/*/lxc.yaml. Used
+# by the media stack: navidrome (reads), lidarr+ytdl-sub (write).
+mount_points:
+  - path: /srv/media
+    host_path: /srv/media
 ```
 
 Behind the scenes, `iac/stacks/infra/lxc.tf` translates `mount_points:`
 into a `dynamic "mount_point"` block on the LXC resource. `backup: false`
-sets the PVE container flag that `vzdump` reads.
+sets the PVE container flag that `vzdump` reads. Bind mounts (`host_path:`)
+are excluded from vzdump unconditionally — `vzdump` only ever captures
+managed volumes.
 
 **Verify per-LXC** (on PVE host):
 ```bash
-pct config 104 | grep ^mp                    # mp0: ..., backup=0
+pct config 104 | grep ^mp                    # mp0: ..., backup=0 (or bind)
 ```
 
 **Verify per-job** (after a backup runs):
@@ -341,6 +365,8 @@ Quick reference of what every LXC contributes to the backup story:
 | coolify (200)         | `services/coolify/backups.yaml`                    | postgres   | Coolify source DB (projects, deploys)  |
 | gateway (103)         | `services/gateway/backups.yaml`                    | sqlite     | Authelia DB (TOTP, sessions, audit)    |
 | navidrome (104)       | `services/navidrome/backups.yaml`                  | sqlite     | Navidrome DB (users, ratings, scrobbles) |
+| lidarr (105)          | `services/lidarr/backups.yaml`                     | sqlite × 3 | Lidarr main + logs DBs, slskd catalog DB |
+| ytdl-sub (106)        | —                                                  | —          | State is reproducible from `subscriptions.yaml` (in git) |
 | adguard (102)         | —                                                  | —          | BoltDB + flock blocks online dump; vzdump only (see below) |
 | coolify-runner-01 (210) | —                                                | —          | Pure Docker host; per-app future       |
 | ops (101)             | —                                                  | —          | Rootfs covered by vzdump               |

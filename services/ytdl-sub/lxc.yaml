@@ -1,0 +1,26 @@
+# LXC spec for ytdl-sub — declarative YouTube/etc. media sync into the
+# shared Navidrome library.
+#
+# Auth: no UI. ytdl-sub is a CLI driven by /etc/ytdl-sub/subscriptions.yaml
+# and runs on a systemd timer (daily). The configuration file is the only
+# "UI" — version it in git, edit, sync, done.
+#
+# Storage:
+#   rootfs (disk_gb)  → uv venv, ytdl-sub state DB (small), ffmpeg cache
+#   mp0 (bind mount)  → /srv/media (host) → /srv/media (in container).
+#                       Writes into /srv/media/youtube; Navidrome reads.
+
+vm_id: 106
+hostname: ytdl-sub
+cores: 2
+memory_mb: 1024
+swap_mb: 512
+disk_gb: 8
+node: pve
+tags: [media, music]
+features:
+  nesting: false
+  keyctl: false
+mount_points:
+  - path: /srv/media
+    host_path: /srv/media

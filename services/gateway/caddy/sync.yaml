@@ -9,7 +9,7 @@ files:
     dest: /etc/caddy/Caddyfile
     # Restrict envsubst to known vars so we never silently overwrite Caddy's
     # own ${...} placeholders (it uses {env.X} and {$X}, but be defensive).
-    envsubst: [IP_COOLIFY, IP_RUNNER, IP_ADGUARD, IP_NAVIDROME, HOMELAB_DOMAIN]
+    envsubst: [IP_COOLIFY, IP_RUNNER, IP_ADGUARD, IP_NAVIDROME, IP_LIDARR, HOMELAB_DOMAIN]
     mode: "0644"
     # Graceful skip if caddy CLI isn't on ops — same behavior as the old
     # sync.sh (`command -v caddy >/dev/null && caddy validate ...`).

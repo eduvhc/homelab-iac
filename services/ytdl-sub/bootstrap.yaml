@@ -1,0 +1,61 @@
+# Bootstrap spec for the ytdl-sub LXC. Python tool, no GitHub release
+# binary — install via uv (Astral) for hermetic, reproducible deps.
+#
+# Tag pinning is intentional: ytdl-sub pulls yt-dlp as a transitive
+# dependency, and yt-dlp's extractor behavior shifts often as sites
+# change. Pinning at the ytdl-sub layer keeps the stack reproducible;
+# `uv tool upgrade ytdl-sub` is the path to a controlled update.
+
+apt:
+  packages:
+    - curl
+    - ca-certificates
+    - jq
+    - python3
+    - python3-venv      # uv venv fallback
+    - ffmpeg            # required for audio extraction + tagging
+    - gettext-base      # envsubst in scripts (if needed)
+
+groups:
+  - {name: media, gid: 65000}
+
+users:
+  - name: ytdl-sub
+    system: true
+    no_create_home: true
+    shell: /usr/sbin/nologin
+    home: /var/lib/ytdl-sub
+    extra_groups: [media]
+
+dirs:
+  - {path: /etc/ytdl-sub,      owner: "ytdl-sub:ytdl-sub", mode: "0750"}
+  - {path: /var/lib/ytdl-sub,  owner: "ytdl-sub:ytdl-sub", mode: "0750"}
+  # /srv/media/youtube was created host-side with mode 2775 owned by
+  # root:media; ytdl-sub writes via the media group. DO NOT chown here
+  # — that would re-set host ownership.
+
+commands:
+  # uv (Astral) install — same pattern as services/lidarr/bootstrap.yaml.
+  # The official curl|sh installer writes to /root/.local/bin; we symlink
+  # to /usr/local/bin so the ytdl-sub user can call it.
+  - if_missing_file: /usr/local/bin/uv
+    shell: |
+      curl -LsSf https://astral.sh/uv/install.sh | sh
+      ln -sf /root/.local/bin/uv /usr/local/bin/uv
+
+  # ytdl-sub via uv tool install — managed isolated venv under
+  # /var/lib/ytdl-sub/.local. The shim at /var/lib/ytdl-sub/.local/bin
+  # is what the systemd unit invokes.
+  - if_missing_file: /var/lib/ytdl-sub/.local/bin/ytdl-sub
+    shell: |
+      su -s /bin/sh ytdl-sub -c '
+        HOME=/var/lib/ytdl-sub
+        XDG_DATA_HOME=$HOME/.local/share
+        XDG_BIN_HOME=$HOME/.local/bin
+        export HOME XDG_DATA_HOME XDG_BIN_HOME
+        cd $HOME && uv tool install ytdl-sub
+      '
+
+systemd:
+  daemon_reload: true
+  enable: [ytdl-sub.timer]

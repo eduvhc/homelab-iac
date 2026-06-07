@@ -49,6 +49,11 @@ func Emit(m Manifest, svcDir string) (string, error) {
 		b.binary(bin)
 	}
 
+	for _, g := range m.Groups {
+		b.section(fmt.Sprintf("group: %s", g.Name))
+		b.group(g)
+	}
+
 	for _, u := range m.Users {
 		b.section(fmt.Sprintf("user: %s", u.Name))
 		b.user(u)
@@ -140,6 +145,17 @@ func (b *builder) binary(bin Binary) {
 	b.printf("fi\n")
 }
 
+func (b *builder) group(g Group) {
+	// Pinned GID when set — required for shared-group GIDs that must match
+	// host-side ACLs across unprivileged LXCs. Without a GID, useradd-time
+	// allocation in the system range is fine.
+	if g.GID > 0 {
+		b.printf("getent group %s >/dev/null 2>&1 || groupadd --gid %d %s\n", g.Name, g.GID, g.Name)
+	} else {
+		b.printf("getent group %s >/dev/null 2>&1 || groupadd --system %s\n", g.Name, g.Name)
+	}
+}
+
 func (b *builder) user(u User) {
 	b.printf("id %s >/dev/null 2>&1 || useradd ", u.Name)
 	var flags []string
@@ -156,6 +172,10 @@ func (b *builder) user(u User) {
 		flags = append(flags, fmt.Sprintf("--home-dir '%s'", u.Home))
 	}
 	b.printf("%s %s\n", strings.Join(flags, " "), u.Name)
+	// Idempotent — usermod -aG with an already-member group is a no-op.
+	if len(u.ExtraGroups) > 0 {
+		b.printf("usermod -aG %s %s\n", strings.Join(u.ExtraGroups, ","), u.Name)
+	}
 }
 
 func (b *builder) dir(d Dir) {

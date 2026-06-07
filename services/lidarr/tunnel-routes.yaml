@@ -1,0 +1,12 @@
+# Cloudflare tunnel routes for the lidarr LXC. Two UIs behind SSO:
+#   lidarr.${HOMELAB_DOMAIN}  → Lidarr (library mgmt)
+#   slskd.${HOMELAB_DOMAIN}   → slskd (Soulseek transfers, share browser)
+#
+# Caddy on the gateway LXC enforces Authelia forward_auth and reverse-
+# proxies to the respective port on lidarr:5030 / lidarr:8686.
+
+- hostname: lidarr
+  upstream: {host: gateway, port: 80}
+
+- hostname: slskd
+  upstream: {host: gateway, port: 80}

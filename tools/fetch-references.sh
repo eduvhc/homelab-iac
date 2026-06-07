@@ -30,7 +30,11 @@ authelia	https://github.com/authelia/authelia.git	master
 caddy	https://github.com/caddyserver/caddy.git	master
 coolify-docs	https://github.com/coollabsio/coolify-docs.git	v4.x
 navidrome	https://github.com/navidrome/navidrome.git	master
-bbolt	https://github.com/etcd-io/bbolt.git	main'
+bbolt	https://github.com/etcd-io/bbolt.git	main
+Lidarr	https://github.com/Lidarr/Lidarr.git	develop
+slskd	https://github.com/slskd/slskd.git	master
+soularr	https://github.com/mrusse/soularr.git	main
+ytdl-sub	https://github.com/jmbannon/ytdl-sub.git	master'
 
 # Resolve repo root relative to this script so it works from any cwd.
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)

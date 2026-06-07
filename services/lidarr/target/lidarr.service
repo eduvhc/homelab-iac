@@ -1,0 +1,25 @@
+[Unit]
+Description=Lidarr — music library manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lidarr
+Group=lidarr
+SupplementaryGroups=media
+WorkingDirectory=/var/lib/lidarr
+ExecStart=/opt/Lidarr/Lidarr -nobrowser -data=/var/lib/lidarr
+Restart=on-failure
+RestartSec=10
+SyslogIdentifier=lidarr
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/lidarr /etc/lidarr /srv/media
+
+[Install]
+WantedBy=multi-user.target

@@ -57,3 +57,18 @@ music.${HOMELAB_DOMAIN}:80 {
     import authelia
     reverse_proxy http://${IP_NAVIDROME}:4533
 }
+
+# Lidarr (music library mgmt) - protected. Lidarr's own UI auth is set to
+# External in services/lidarr/bootstrap.yaml → config.xml; Authelia is the
+# only gate.
+lidarr.${HOMELAB_DOMAIN}:80 {
+    import authelia
+    reverse_proxy http://${IP_LIDARR}:8686
+}
+
+# slskd (Soulseek daemon) - protected. slskd's own auth is disabled
+# (services/lidarr/target/slskd.yml.tmpl → web.authentication.disabled).
+slskd.${HOMELAB_DOMAIN}:80 {
+    import authelia
+    reverse_proxy http://${IP_LIDARR}:5030
+}

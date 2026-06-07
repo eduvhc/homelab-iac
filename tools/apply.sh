@@ -6,7 +6,7 @@
 #   tools/apply.sh [-h|--help]
 #
 # Phases (each idempotent):
-#   1. tofu apply iac/stacks/infra      (4 LXCs + CF tunnel + DNS)
+#   1. tofu apply iac/stacks/infra      (LXCs + CF tunnel + DNS)
 #   2. wait for LXCs to be SSH-reachable
 #   3. bootstrap service LXCs           (install binaries + per-service secrets)
 #   4. install cloudflared connectors on Coolify + runner (HA)
@@ -132,6 +132,17 @@ log_info "navidrome ($IP_NAVIDROME): bootstrap"
 bootstrap_service navidrome "$IP_NAVIDROME"
 sync_service navidrome
 
+log_info "lidarr ($IP_LIDARR): bootstrap (Lidarr + slskd + soularr)"
+bootstrap_service lidarr "$IP_LIDARR"
+# sync needs SOULSEEK_USERNAME / SOULSEEK_PASSWORD in env (from sops via
+# source_envrc) for slskd.yml envsubst. The sync engine will fail loudly
+# if either is unset/empty.
+sync_service lidarr
+
+log_info "ytdl-sub ($IP_YTDL_SUB): bootstrap"
+bootstrap_service ytdl-sub "$IP_YTDL_SUB"
+sync_service ytdl-sub
+
 # ── 4. Cloudflared HA pair ──────────────────────────────────────────────────
 log_step "4/8" "install cloudflared connectors (Coolify + runner replica for HA)"
 TUNNEL_TOKEN=$(cd "$INFRA_DIR" && tofu output -raw tunnel_token)
@@ -198,5 +209,7 @@ echo "  Coolify UI:  https://coolify.${HOMELAB_DOMAIN}"
 echo "  Authelia UI: https://auth.${HOMELAB_DOMAIN}"
 echo "  AdGuard UI:  https://adguard.${HOMELAB_DOMAIN} (via gateway with SSO)"
 echo "  Navidrome:   https://music.${HOMELAB_DOMAIN} (via gateway with SSO)"
+echo "  Lidarr:      https://lidarr.${HOMELAB_DOMAIN} (via gateway with SSO)"
+echo "  slskd:       https://slskd.${HOMELAB_DOMAIN} (via gateway with SSO)"
 echo "  Admin email: $HOMELAB_ADMIN_EMAIL"
 echo "  Admin pass:  sops -d iac/secrets.sops.yaml | grep HOMELAB_ADMIN_PASSWORD"

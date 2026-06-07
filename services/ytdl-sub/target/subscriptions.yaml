@@ -1,0 +1,40 @@
+# ytdl-sub subscriptions — the only "UI" of this service.
+#
+# Each top-level key under a preset is one subscription. Edit + commit +
+# `tools/apply.sh` (which calls sync_service ytdl-sub) to roll out.
+#
+# Library layout:
+#   /srv/media/youtube/<Channel or Playlist Name>/
+#       <track>.<ext>            (mp3 by default; flac if source allows)
+#       <track>.nfo              (Kodi/Jellyfin metadata, harmless for Navidrome)
+#       cover.jpg                (album art from channel/playlist thumbnail)
+#
+# Presets reference: https://ytdl-sub.readthedocs.io/en/latest/presets.html
+
+__preset__:
+  # Drop into Navidrome's "YouTube" library (created via UI in Settings →
+  # Libraries pointing at /var/lib/navidrome/media/youtube). Output paths
+  # are absolute on this LXC; they resolve to /srv/media/youtube on the
+  # shared bind-mount.
+  overrides:
+    music_directory: "/srv/media/youtube"
+
+# ── Soundcloud-style channel/playlist sync — single track per video ─────────
+"Yt Music Playlist":
+  preset:
+    - "Yt Music Playlist"
+  overrides:
+    music_directory: "/srv/media/youtube"
+  # Example subscriptions — replace with your own. Format:
+  #   "<Display name>":
+  #     url: "<playlist or channel URL>"
+  # See https://ytdl-sub.readthedocs.io/en/latest/prebuilt_presets/music.html
+  # for the supported variables.
+
+# Example (commented — uncomment + edit when ready):
+# "NTS Radio Mixes":
+#   preset:
+#     - "Yt Music Playlist"
+#   overrides:
+#     music_directory: "/srv/media/youtube"
+#   url: "https://www.youtube.com/@NTSRadioMixes"

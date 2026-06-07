@@ -1,8 +1,6 @@
 # Declarative one-time install spec for the navidrome LXC. The Go engine at
 # tools/lib/cmd/bootstrap emits an idempotent shell script from this; the
 # script is ssh-piped into `sh -s` on the target by tools/apply.sh.
-#
-# Replaces the per-service bootstrap.sh.
 
 apt:
   packages: [curl, ca-certificates, jq, tar, sqlite3, gettext-base]
@@ -16,21 +14,28 @@ binaries:
     dest: /usr/local/bin/navidrome
     mode: "0755"
 
+# Shared group for the media bind-mount (/var/lib/navidrome/media → /srv/media).
+# GID 65000 inside the container maps to host GID 165000, which owns the host
+# dir. The navidrome user joins the group so it can read the library; Lidarr
+# + ytdl-sub (other LXCs, same media group GID) write to it.
+groups:
+  - {name: media, gid: 65000}
+
 users:
   - name: navidrome
     system: true
     no_create_home: true
     shell: /usr/sbin/nologin
     home: /var/lib/navidrome
+    extra_groups: [media]
 
 dirs:
-  - {path: /etc/navidrome,                owner: navidrome:navidrome, mode: "0750"}
-  - {path: /var/lib/navidrome,            owner: navidrome:navidrome, mode: "0750"}
-  - {path: /var/lib/navidrome/backups,    owner: navidrome:navidrome, mode: "0750"}
-  # /var/lib/navidrome/music is a separate mp0 volume (defined in lxc.yaml);
-  # this `install -d` is defensive — the mount point exists at first boot
-  # as root:root, we re-set perms here so navidrome can write.
-  - {path: /var/lib/navidrome/music,      owner: navidrome:navidrome, mode: "0755"}
+  - {path: /etc/navidrome,             owner: navidrome:navidrome, mode: "0750"}
+  - {path: /var/lib/navidrome,         owner: navidrome:navidrome, mode: "0750"}
+  - {path: /var/lib/navidrome/backups, owner: navidrome:navidrome, mode: "0750"}
+  # /var/lib/navidrome/media is a host bind-mount (see lxc.yaml). DO NOT
+  # `install -d` it — that would chown the host dir and break cross-LXC
+  # writes. Perms are managed host-side (root:media 2775 setgid).
 
 systemd:
   daemon_reload: true

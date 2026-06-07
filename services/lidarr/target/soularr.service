@@ -1,0 +1,29 @@
+[Unit]
+Description=Soularr — Lidarr ↔ slskd bridge (one-shot)
+After=lidarr.service slskd.service
+# Don't block on dependencies — if one is down, soularr just retries
+# next timer fire. Tighter coupling buys nothing.
+Wants=lidarr.service slskd.service
+
+[Service]
+Type=oneshot
+User=soularr
+Group=soularr
+SupplementaryGroups=media
+WorkingDirectory=/opt/soularr
+# Per-LXC API keys resolved by envsubst against the template, NOT by
+# soularr itself (Python's ConfigParser does not expand env vars).
+EnvironmentFile=/etc/lidarr-stack/secrets.env
+ExecStartPre=/bin/sh -c 'envsubst < /etc/soularr/config.ini.tmpl > /opt/soularr/config.ini'
+ExecStart=/opt/soularr/.venv/bin/python /opt/soularr/soularr.py
+SyslogIdentifier=soularr
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/soularr /opt/soularr /etc/soularr /srv/media
+
+[Install]
+WantedBy=multi-user.target

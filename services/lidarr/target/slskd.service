@@ -1,0 +1,31 @@
+[Unit]
+Description=slskd — Soulseek daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=slskd
+Group=slskd
+SupplementaryGroups=media
+WorkingDirectory=/var/lib/slskd
+# Per-LXC random API/JWT keys, resolved at runtime via slskd's ${VAR}
+# expansion in slskd.yml. Owned by root:media 0640 — readable by slskd
+# via the media supplementary group.
+EnvironmentFile=/etc/lidarr-stack/secrets.env
+Environment=SLSKD_APP_DIR=/var/lib/slskd
+Environment=SLSKD_CONFIG=/etc/slskd/slskd.yml
+ExecStart=/opt/slskd/slskd
+Restart=on-failure
+RestartSec=10
+SyslogIdentifier=slskd
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/slskd /etc/slskd /srv/media
+
+[Install]
+WantedBy=multi-user.target

@@ -38,5 +38,9 @@ tools/fetch-references.sh coolify
 | caddy                                | master | LXC 103 |
 | navidrome                            | master | LXC 104 (music server) |
 | bbolt                                | main   | AdGuard stats.db (verifying online-backup feasibility — see docs/backups.md) |
+| Lidarr                               | develop | LXC 105 (music library orchestrator) |
+| slskd                                | master | LXC 105 (Soulseek daemon) |
+| soularr                              | main   | LXC 105 (Lidarr↔slskd bridge) |
+| ytdl-sub                             | master | LXC 106 (YouTube → Navidrome sync) |
 
 All clones are shallow (`--depth=1`) against the listed branch.

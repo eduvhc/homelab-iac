@@ -7,7 +7,11 @@
 # request. Subsonic API clients (iOS/Mac apps) use per-user generated
 # passwords from the web UI — that flow is unaffected by reverse-proxy auth.
 
-MusicFolder = "/var/lib/navidrome/music"
+# MusicFolder seeds "Library 1" on first launch. Additional libraries
+# (e.g. "YouTube" → /var/lib/navidrome/media/youtube) are added via the
+# web UI: Settings → Libraries → +. This is a one-time per-deploy step —
+# Navidrome does not yet support declaring extra libraries via config.
+MusicFolder = "/var/lib/navidrome/media/music"
 DataFolder  = "/var/lib/navidrome"
 Address     = "0.0.0.0"
 Port        = 4533

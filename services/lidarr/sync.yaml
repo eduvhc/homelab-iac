@@ -1,0 +1,52 @@
+# Declarative sync spec for the lidarr LXC.
+#
+# Lidarr's own config.xml is seeded by bootstrap.yaml (one-shot, preserves
+# the API key) and then managed by Lidarr itself — not synced from here.
+# What we DO sync: slskd config, soularr config template, and the three
+# systemd units (Lidarr, slskd, soularr.service + soularr.timer).
+
+host: lidarr
+
+files:
+  - src: target/slskd.yml.tmpl
+    dest: /etc/slskd/slskd.yml
+    envsubst: [IP_GATEWAY, SOULSEEK_USERNAME, SOULSEEK_PASSWORD]
+    owner: slskd:slskd
+    mode: "0640"
+    on_change:
+      - restart: slskd.service
+
+  - src: target/soularr-config.ini.tmpl
+    dest: /etc/soularr/config.ini.tmpl
+    owner: soularr:soularr
+    mode: "0640"
+    # No on_change needed — soularr re-renders + reads on every timer fire.
+
+  - src: target/lidarr.service
+    dest: /etc/systemd/system/lidarr.service
+    mode: "0644"
+    on_change:
+      - daemon_reload: true
+      - restart: lidarr.service
+
+  - src: target/slskd.service
+    dest: /etc/systemd/system/slskd.service
+    mode: "0644"
+    on_change:
+      - daemon_reload: true
+      - restart: slskd.service
+
+  - src: target/soularr.service
+    dest: /etc/systemd/system/soularr.service
+    mode: "0644"
+    on_change:
+      - daemon_reload: true
+
+  - src: target/soularr.timer
+    dest: /etc/systemd/system/soularr.timer
+    mode: "0644"
+    on_change:
+      - daemon_reload: true
+      - restart: soularr.timer
+
+verify_active: lidarr.service

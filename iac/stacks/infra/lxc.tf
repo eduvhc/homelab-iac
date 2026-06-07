@@ -46,15 +46,26 @@ resource "proxmox_virtual_environment_container" "lxc" {
   }
 
   # Optional extra mount points (mp0, mp1, ...) declared per service in
-  # services/<svc>/lxc.yaml under `mount_points:`. Each entry maps to a
-  # separate LVM volume on local-lvm. Used by media services (Navidrome)
-  # to keep the large data dir out of rootfs AND out of vzdump when
-  # backup: false — state-vs-media separation pattern.
+  # services/<svc>/lxc.yaml under `mount_points:`. Two modes per entry:
+  #
+  #   size_gb:   allocate a new LVM-thin volume on local-lvm. Per-container,
+  #              private, included/excluded from vzdump per `backup:`. Used
+  #              for state-vs-media separation when state lives on host SSD.
+  #
+  #   host_path: bind-mount the given host path into the container. Shared
+  #              across LXCs trivially — the same host path can be declared
+  #              in multiple services/<svc>/lxc.yaml entries (e.g. Navidrome
+  #              + Lidarr + ytdl-sub all see /srv/media/music). bpg emits
+  #              these as `mp<n>: /host/path,mp=/in/container`. Bind mounts
+  #              require root@pam username+password on the provider (API
+  #              tokens are blocked by PVE) — already the case here.
+  #
+  # Exactly one of size_gb / host_path must be set per entry.
   dynamic "mount_point" {
     for_each = lookup(each.value, "mount_points", [])
     content {
-      volume = "local-lvm"
-      size   = "${mount_point.value.size_gb}G"
+      volume = lookup(mount_point.value, "host_path", null) != null ? mount_point.value.host_path : "local-lvm"
+      size   = lookup(mount_point.value, "host_path", null) != null ? null : "${lookup(mount_point.value, "size_gb", 0)}G"
       path   = mount_point.value.path
       backup = lookup(mount_point.value, "backup", true)
     }

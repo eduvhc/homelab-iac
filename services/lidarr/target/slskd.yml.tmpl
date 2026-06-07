@@ -1,0 +1,54 @@
+# slskd configuration. Rendered by the sync engine via envsubst.
+#
+# Whitelisted envsubst vars (declared in services/lidarr/sync.yaml):
+#   ${IP_GATEWAY}                 — only IP allowed to be the reverse-proxy
+#   ${SOULSEEK_USERNAME}          — from iac/secrets.sops.yaml (user-set)
+#   ${SOULSEEK_PASSWORD}          — from iac/secrets.sops.yaml (user-set)
+#
+# Per-LXC random secrets (NOT envsubst'd here — resolved by slskd at boot
+# via its own ${VAR} expansion against the EnvironmentFile=):
+#   ${SLSKD_API_KEY}, ${SLSKD_JWT_KEY}
+
+soulseek:
+  username: ${SOULSEEK_USERNAME}
+  password: ${SOULSEEK_PASSWORD}
+  description: |
+    Personal homelab — slskd. Sharing back what I download.
+
+shares:
+  directories:
+    # Required by Soulseek etiquette — share at least the music library so
+    # we contribute back to the network.
+    - /srv/media/music
+
+directories:
+  incomplete: /var/lib/slskd/incomplete
+  downloads: /srv/media/_incoming
+
+global:
+  upload:
+    speed_limit: 0   # kB/s; 0 = unlimited
+  download:
+    speed_limit: 0
+
+web:
+  port: 5030
+  url_base: /
+  authentication:
+    # Auth delegated to Authelia at the gateway. slskd's own login is
+    # disabled — the LXC is unreachable from the LAN except via Caddy's
+    # forward_auth, and from soularr (localhost API key auth).
+    disabled: true
+    api_keys:
+      soularr_key:
+        key: ${SLSKD_API_KEY}
+        role: readwrite
+        cidr: 127.0.0.1/32
+
+logger:
+  loki:
+    enabled: false
+
+flags:
+  no_logo: true
+  no_start_check: false
