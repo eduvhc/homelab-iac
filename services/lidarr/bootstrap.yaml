@@ -83,6 +83,26 @@ commands:
       rm -f /tmp/lidarr.tar.gz
       chown -R lidarr:lidarr /opt/Lidarr
 
+  # Tubifarry plugin install — direct to disk. The Lidarr UI's
+  # System → Plugins flow ultimately writes here too (see
+  # references/Lidarr/src/NzbDrone.Core/Plugins/InstallPluginService.cs:77
+  # → Path.Combine(PluginFolder(), package.Owner, package.Name)). We
+  # skip the API/UI round-trip and drop the unzipped artifact in the
+  # expected layout directly — works before Lidarr is running.
+  #
+  # Lidarr scans for `Lidarr.Plugin.*.dll` under
+  # /var/lib/lidarr/plugins/<owner>/<name>/ on startup
+  # (PathExtensions.cs:325 → GetPluginAssemblies). After dropping the
+  # files, the next Lidarr start picks Tubifarry up automatically.
+  - if_missing_file: /var/lib/lidarr/plugins/TypNull/Tubifarry/Lidarr.Plugin.Tubifarry.dll
+    shell: |
+      _tag=$(curl -fsSL 'https://api.github.com/repos/TypNull/Tubifarry/releases/latest' | jq -r .tag_name)
+      curl -fsSL "https://github.com/TypNull/Tubifarry/releases/download/${_tag}/Tubifarry-${_tag}.net8.0.zip" -o /tmp/tubifarry.zip
+      install -d -o lidarr -g lidarr /var/lib/lidarr/plugins/TypNull/Tubifarry
+      unzip -q -o /tmp/tubifarry.zip -d /var/lib/lidarr/plugins/TypNull/Tubifarry
+      chown -R lidarr:lidarr /var/lib/lidarr/plugins
+      rm -f /tmp/tubifarry.zip
+
   # slskd install — single binary in a zip.
   - if_missing_file: /opt/slskd/slskd
     shell: |

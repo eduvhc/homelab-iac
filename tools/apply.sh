@@ -138,6 +138,9 @@ bootstrap_service lidarr "$IP_LIDARR"
 # source_envrc) for slskd.yml envsubst. The sync engine will fail loudly
 # if either is unset/empty.
 sync_service lidarr
+# configure waits for Lidarr to be HTTP-ready then POSTs the Slskd indexer
+# + download client via the API (idempotent — GETs first, skips if present).
+LIDARR_HOST="$IP_LIDARR" "$REPO_ROOT/services/lidarr/ops/configure.sh"
 
 log_info "ytdl-sub ($IP_YTDL_SUB): bootstrap"
 bootstrap_service ytdl-sub "$IP_YTDL_SUB"
