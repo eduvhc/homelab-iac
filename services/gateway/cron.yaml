@@ -1,0 +1,13 @@
+# Cron entries owned by the gateway service (Caddy + Authelia).
+# Assembled into /etc/cron.d/iac on the ops LXC by tools/lib/assemble-crons
+# (called by apply.sh phase 8).
+
+- name: authelia-backup-sqlite
+  schedule: "50 2 * * *"       # daily 02:50 UTC — 10 min before vzdump's 03:00
+  command: services/gateway/authelia/backup-sqlite.sh
+  log: /var/log/authelia-backup-sqlite.log
+  description: |
+    Inner backup of Authelia's SQLite DB (TOTP secrets, sessions, audit
+    log). sqlite3 .backup → /var/lib/authelia/backups/ on the gateway
+    LXC (captured by next vzdump). Retention: 14 dumps. See
+    docs/backups.md.

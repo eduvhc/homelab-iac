@@ -7,7 +7,7 @@ set -e
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl ca-certificates gnupg jq debian-keyring debian-archive-keyring apt-transport-https >/dev/null
+apt-get install -y -qq curl ca-certificates gnupg jq sqlite3 debian-keyring debian-archive-keyring apt-transport-https >/dev/null
 
 if ! command -v caddy >/dev/null; then
   echo "==> installing Caddy"

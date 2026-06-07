@@ -206,9 +206,65 @@ covered by the LXC's vzdump only. If a specific deployed app needs more
 aggressive or off-host backups, that's app-level work (e.g. a sidecar
 that ships dumps to R2).
 
-### AdGuard / gateway / runner — pure state, all in rootfs
+### Authelia — sqlite3 .backup of the SQLite DB + vzdump
 
-No special handling. The vzdump captures everything.
+Authelia stores TOTP enrollments, session tokens, identity-verification
+cookies, and audit log in `/var/lib/authelia/db.sqlite3` (WAL mode).
+A filesystem snapshot of a live SQLite-WAL DB can land in a state that
+needs WAL recovery on next open — usually fine, occasionally not. The
+SQLite Backup API (`.backup` dot-command) produces a single consistent
+file safe to restore anywhere. TOTP secrets in particular cannot afford
+corruption — re-enrollment is a manual user action.
+
+```
+services/gateway/authelia/backup-sqlite.sh   runs from ops
+  └─ uses tools/backups/lib/sqlite.sh    sqlite3 .backup + PRAGMA integrity_check
+  └─ uses tools/backups/lib/retention.sh keep-last-N rotation
+  └─ scheduled in services/gateway/cron.yaml at 02:50 UTC
+
+Output: root@gateway:/var/lib/authelia/backups/authelia-<UTC-ts>.sqlite3
+Method: sqlite3 SRC ".backup DEST"  (then PRAGMA integrity_check)
+Retention: keep last 14 dumps
+```
+
+The `sqlite3` CLI is installed in `services/gateway/bootstrap.sh`.
+
+**Restore the Authelia DB only**:
+```bash
+# On the gateway LXC
+systemctl stop authelia
+LATEST=$(ls -t /var/lib/authelia/backups/authelia-*.sqlite3 | head -1)
+cp "$LATEST" /var/lib/authelia/db.sqlite3
+chown authelia:authelia /var/lib/authelia/db.sqlite3
+systemctl start authelia
+```
+
+### AdGuard — vzdump only (deliberate skip)
+
+AdGuard's meaningful state is split:
+- `AdGuardHome.yaml` — DNS settings, rewrites, filter URLs, users.
+  Already declarative: `services/adguard/AdGuardHome.yaml.tmpl` is
+  rendered by `sync.sh` from sops on every apply. Source of truth is
+  this repo.
+- `data/sessions.db` — login sessions, regenerated on user login.
+- `data/stats.db` — DNS query stats over time. Nice to keep but
+  reproducible from new queries.
+- `data/filters/` — re-downloaded from upstream URLs on schedule.
+
+What matters (the YAML) is in git. The rest is ephemeral. **No inner
+backup is added** — vzdump captures the data dir well enough for the
+stats history, and a full disaster restore reconstructs AdGuard from
+`sync.sh` + sops anyway.
+
+If we ever turn on AdGuard's DHCP server (`leases.db` would matter for
+client name → IP history), revisit this decision.
+
+### Caddy gateway / Coolify runner — no state worth inner-backing
+
+Caddy reads its config from `/etc/caddy/Caddyfile`, which is declarative
+(rendered by `services/gateway/caddy/sync.sh`). The runner is a Docker
+host — its state lives inside the containers it runs (covered above per
+service). Neither has a database to dump.
 
 ## Inner backup pattern (`tools/backups/`)
 
