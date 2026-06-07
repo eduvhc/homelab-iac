@@ -1,0 +1,36 @@
+# Declarative sync spec for the navidrome LXC. Read by
+# tools/lib/sync (Go). Replaces the per-service sync.sh.
+#
+# Schema (see also services/adguard/sync.yaml for a fuller example):
+#   host           service name (resolved via IP_<HOST> env var which is
+#                  populated by tools/lib/infra/tofu.sh)
+#   files[]        each rendered, sha256-diffed against target, pushed if changed
+#     src          path relative to this service's dir
+#     dest         absolute path on the target host
+#     envsubst     whitelist of env vars to substitute (others ignored)
+#     owner        chown user:group after push
+#     mode         chmod octal after push
+#     atomic       true → scp .tmp + mv (for files watched by a daemon)
+#     on_change[]  systemctl/command(s) to run if THIS file changed; deduped
+#                  across the manifest before applying in one ssh round-trip
+#   verify_active  systemctl is-active sanity check after applying changes
+
+host: navidrome
+
+files:
+  - src: navidrome.toml.tmpl
+    dest: /etc/navidrome/navidrome.toml
+    envsubst: [IP_GATEWAY]
+    owner: navidrome:navidrome
+    mode: "0640"
+    on_change:
+      - restart: navidrome.service
+
+  - src: navidrome.service
+    dest: /etc/systemd/system/navidrome.service
+    mode: "0644"
+    on_change:
+      - daemon_reload: true
+      - restart: navidrome.service
+
+verify_active: navidrome.service

@@ -1,0 +1,25 @@
+# Sync spec for AdGuard Home on the adguard LXC. Two artifacts: the AGH
+# config YAML and the nftables ruleset. AGH config gets a local YAML
+# parse check; nftables gets a target-side `nft -c` syntax check before
+# the live restart.
+
+host: adguard
+
+files:
+  - src: AdGuardHome.yaml.tmpl
+    dest: /opt/AdGuardHome/AdGuardHome.yaml
+    envsubst: [IP_GATEWAY, IP_COOLIFY, HOMELAB_DOMAIN]
+    mode: "0600"
+    validate_local: python3 -c 'import yaml; yaml.safe_load(open("$f"))'
+    on_change:
+      - restart: AdGuardHome.service
+
+  - src: nftables.conf.tmpl
+    dest: /etc/nftables.conf
+    envsubst: [LAN_CIDR, IP_GATEWAY]
+    mode: "0644"
+    validate_remote: nft -c -f $f
+    on_change:
+      - restart: nftables.service
+
+verify_active: [AdGuardHome.service, nftables.service]

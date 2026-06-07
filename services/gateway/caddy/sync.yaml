@@ -1,0 +1,20 @@
+# Sync spec for Caddy on the gateway LXC. Caddyfile is the only artifact;
+# validation happens locally (caddy binary on ops, if installed) AND we
+# prefer reload over restart (caddy reloads zero-downtime).
+
+host: gateway
+
+files:
+  - src: Caddyfile.tmpl
+    dest: /etc/caddy/Caddyfile
+    # Restrict envsubst to known vars so we never silently overwrite Caddy's
+    # own ${...} placeholders (it uses {env.X} and {$X}, but be defensive).
+    envsubst: [IP_COOLIFY, IP_RUNNER, IP_ADGUARD, IP_NAVIDROME, HOMELAB_DOMAIN]
+    mode: "0644"
+    # Graceful skip if caddy CLI isn't on ops — same behavior as the old
+    # sync.sh (`command -v caddy >/dev/null && caddy validate ...`).
+    validate_local: command -v caddy >/dev/null && caddy validate --config $f 2>&1 | tail -3 || true
+    on_change:
+      - reload: caddy.service       # engine tries reload, falls back to restart
+
+verify_active: caddy.service

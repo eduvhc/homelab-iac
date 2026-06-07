@@ -60,8 +60,17 @@ ensure_apt_pkg() {
   DEBIAN_FRONTEND=noninteractive apt-get update -qq
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$2"
 }
-# Go is needed by tools/lib/assemble-crons (phase 8).
+# Go is needed by tools/lib/assemble-crons + tools/lib/sync (phase 3, 8).
 ensure_apt_pkg go golang-go
+
+# sync_service SVC — invoke the declarative sync engine against
+# services/<SVC>/sync.yaml if it exists. Caller must have already sourced
+# tools/lib/infra/tofu.sh so IP_<HOST> env vars are populated.
+sync_service() {
+  _yaml="$REPO_ROOT/services/$1/sync.yaml"
+  [ -f "$_yaml" ] || return 0
+  (cd "$REPO_ROOT/tools/lib/sync" && go run . "$_yaml")
+}
 
 # ── 1. Infra ────────────────────────────────────────────────────────────────
 log_step "1/8" "tofu apply — stacks/infra"
@@ -90,19 +99,21 @@ log_step "3/8" "bootstrap service LXCs"
 
 log_info "adguard ($IP_ADGUARD): install AGH binary"
 ssh root@"$IP_ADGUARD" 'sh -s' < "$REPO_ROOT/services/adguard/bootstrap.sh"
-[ -x "$REPO_ROOT/services/adguard/sync.sh" ] && "$REPO_ROOT/services/adguard/sync.sh"
+sync_service adguard
 
 log_info "gateway ($IP_GATEWAY): install Caddy + Authelia + generate OIDC keys"
 ssh root@"$IP_GATEWAY" 'sh -s' < "$REPO_ROOT/services/gateway/bootstrap.sh"
+# authelia/sync.sh is hybrid: argon2id hash logic in shell, file render+push
+# delegated to the sync engine via services/gateway/authelia/sync.yaml.
 [ -x "$REPO_ROOT/services/gateway/authelia/sync.sh" ] && "$REPO_ROOT/services/gateway/authelia/sync.sh"
-[ -x "$REPO_ROOT/services/gateway/caddy/sync.sh" ]    && "$REPO_ROOT/services/gateway/caddy/sync.sh"
+sync_service gateway/caddy
 
 log_info "coolify-runner-01 ($IP_RUNNER): install Docker"
 ssh root@"$IP_RUNNER" 'sh -s' < "$REPO_ROOT/services/coolify-runner-01/bootstrap.sh"
 
 log_info "navidrome ($IP_NAVIDROME): install Navidrome binary"
 ssh root@"$IP_NAVIDROME" 'sh -s' < "$REPO_ROOT/services/navidrome/bootstrap.sh"
-[ -x "$REPO_ROOT/services/navidrome/sync.sh" ] && "$REPO_ROOT/services/navidrome/sync.sh"
+sync_service navidrome
 
 # ── 4. Cloudflared HA pair ──────────────────────────────────────────────────
 log_step "4/8" "install cloudflared connectors (Coolify + runner replica for HA)"
