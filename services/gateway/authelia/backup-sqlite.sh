@@ -18,12 +18,13 @@ export REPO_ROOT
 # shellcheck disable=SC1091
 . "$REPO_ROOT/tools/lib/common.sh"
 # shellcheck disable=SC1091
+. "$REPO_ROOT/tools/lib/ip-from-yaml.sh"
+# shellcheck disable=SC1091
 . "$REPO_ROOT/tools/backups/lib/sqlite.sh"
 # shellcheck disable=SC1091
 . "$REPO_ROOT/tools/backups/lib/retention.sh"
 
-HOST=root@$(awk '/^  gateway:/ {print $2}' "$REPO_ROOT/network/ips.yaml")
-[ -n "${HOST#root@}" ] || die "could not resolve gateway IP from network/ips.yaml"
+HOST=root@$(ip_of gateway)
 
 SRC=/var/lib/authelia/db.sqlite3
 DEST_DIR=/var/lib/authelia/backups

@@ -20,15 +20,13 @@ export REPO_ROOT
 # shellcheck disable=SC1091
 . "$REPO_ROOT/tools/lib/common.sh"
 # shellcheck disable=SC1091
+. "$REPO_ROOT/tools/lib/ip-from-yaml.sh"
+# shellcheck disable=SC1091
 . "$REPO_ROOT/tools/backups/lib/postgres.sh"
 # shellcheck disable=SC1091
 . "$REPO_ROOT/tools/backups/lib/retention.sh"
 
-# Coolify host IP is stable per network/ips.yaml; we don't need the full
-# tofu output round-trip here (cron runs many times per week and tofu
-# output adds 1-2s + a state read). Reading the YAML directly is enough.
-HOST=root@$(awk '/^  coolify:/ {print $2}' "$REPO_ROOT/network/ips.yaml")
-[ -n "${HOST#root@}" ] || die "could not resolve coolify IP from network/ips.yaml"
+HOST=root@$(ip_of coolify)
 
 DEST_DIR=/data/coolify/backups/source
 LABEL=coolify-source
