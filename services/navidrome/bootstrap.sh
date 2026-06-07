@@ -15,7 +15,7 @@ set -e
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl ca-certificates jq tar gettext-base >/dev/null
+apt-get install -y -qq curl ca-certificates jq tar sqlite3 gettext-base >/dev/null
 
 if [ ! -x /usr/local/bin/navidrome ]; then
   echo "==> installing Navidrome"

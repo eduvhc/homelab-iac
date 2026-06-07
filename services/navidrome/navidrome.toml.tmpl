@@ -21,14 +21,11 @@ ReverseProxyUserHeader = "Remote-User"
 # Disable the default admin signup flow — auth is delegated to Authelia.
 EnableUserEditing = false
 
-# Native DB backup (Navidrome ≥0.54). Backs up the SQLite DB only — NOT
-# music, NOT this config. Dumps land on rootfs so vzdump picks them up.
-# Music library is excluded from vzdump via mount_points[0].backup=false
-# in services/navidrome/lxc.yaml.
-[Backup]
-Path     = "/var/lib/navidrome/backups"
-Schedule = "0 3 * * *"
-Count    = 14
+# DB backups are handled by services/navidrome/backup-sqlite.sh (cron-driven
+# from ops), following the same pattern as Authelia and Coolify. See
+# docs/backups.md → "Inner backup pattern". Navidrome's own [Backup] block
+# is intentionally NOT used — schedule + retention live in git, not in
+# this toml.
 
 # Scanner: watch the library for changes (inotify) on top of the periodic scan.
 [Scanner]

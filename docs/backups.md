@@ -23,7 +23,7 @@ media (intact at source) and secrets (in git).
 │ Asset                          │ Mechanism            │ RPO     │
 ├────────────────────────────────┼──────────────────────┼─────────┤
 │ Service state (configs, DBs)   │ vzdump daily 03:00   │ ≤24h    │
-│ Navidrome DB                   │ vzdump + native dump │ ≤24h    │
+│ Navidrome DB                   │ vzdump + sqlite3 dump│ ≤24h    │
 │ Music library (FLACs)          │ NOT backed up*       │ N/A     │
 │ Secrets (sops-encrypted)       │ git + R2 + age key   │ commit  │
 │ Tofu state                     │ R2 (CF), PBKDF2-AES  │ apply   │
@@ -133,34 +133,37 @@ ls -lh /mnt/pve/backup/dump/vzdump-lxc-104-*.tar.zst
 
 ## Per-service exceptions
 
-### Navidrome — native DB backup in addition to vzdump
+### Navidrome — sqlite3 .backup of the SQLite DB + vzdump
 
-Navidrome has an in-process backup that dumps just the SQLite DB to
-`/var/lib/navidrome/backups/` on a schedule. Configured in
-`services/navidrome/navidrome.toml.tmpl`:
+Navidrome's SQLite DB at `/var/lib/navidrome/navidrome.db` holds users,
+ratings, playlists, scrobbles, play counts — none of which is
+declarative. Same pattern as Authelia (the engine even uses the same
+`tools/backups/lib/sqlite.sh` helper):
 
-```toml
-[Backup]
-Path     = "/var/lib/navidrome/backups"
-Schedule = "0 3 * * *"
-Count    = 14
+```
+services/navidrome/backup-sqlite.sh   runs from ops
+  └─ uses tools/backups/lib/sqlite.sh    sqlite3 .backup + PRAGMA integrity_check
+  └─ uses tools/backups/lib/retention.sh keep-last-N rotation
+  └─ scheduled in services/navidrome/cron.yaml at 02:50 UTC
+
+Output: root@navidrome:/var/lib/navidrome/backups/navidrome-<UTC-ts>.sqlite3
+Method: sqlite3 SRC ".backup DEST"  (then PRAGMA integrity_check)
+Retention: keep last 14 dumps
 ```
 
-That dir lives on rootfs, so `vzdump` captures it. Net effect: **two
-independent DB snapshots per day** (the native one at 03:00, the vzdump
-one shortly after), at different layers — defense in depth.
+Navidrome's own `[Backup]` toml block is **intentionally not enabled**.
+Earlier iterations used it as a freebie, but consistency wins: every
+service in this repo now follows the same cron + script pattern, so
+operators don't need to remember which service backs up via its app
+and which via our scripts.
 
-Why both? The native dump is a clean SQLite file you can copy out and
-`sqlite3` into anywhere. The vzdump captures the live DB mid-write
-(snapshot mode is consistent at the filesystem level, but a SQLite WAL
-may need recovery on restore). The native dump is the preferred restore
-source; vzdump is the fallback if the LXC is gone.
-
-**Restore the DB only** (no LXC recreate needed):
+**Restore the DB only** (no LXC recreate):
 ```bash
-# On the LXC
+# On the Navidrome LXC
 systemctl stop navidrome
-sqlite3 /var/lib/navidrome/navidrome.db ".restore /var/lib/navidrome/backups/navidrome_backup_<ts>.db"
+LATEST=$(ls -t /var/lib/navidrome/backups/navidrome-*.sqlite3 | head -1)
+cp "$LATEST" /var/lib/navidrome/navidrome.db
+chown navidrome:navidrome /var/lib/navidrome/navidrome.db
 systemctl start navidrome
 ```
 
@@ -305,11 +308,9 @@ Same reasoning as the rest of this repo's IaC-vs-UI stance:
   up in the same channel as drift checks.
 
 Trade-off: no "Backups" tab in the app UI. Acceptable — this homelab
-is IaC-driven.
-
-Navidrome's native `[Backup]` block is the exception, kept because it's
-a 4-line freebie that ships with the app and SQLite single-file backups
-are trivial. Strictly redundant given vzdump, but costs nothing.
+is IaC-driven. No exceptions: every backed-up service follows this
+pattern, including Navidrome (its native `[Backup]` block was removed
+in favor of the script).
 
 ### Adding inner backups for a new service
 
