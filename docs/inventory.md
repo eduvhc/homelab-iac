@@ -56,8 +56,11 @@ When new PVE nodes arrive (see `3-node-plan.md`):
 
 ## PVE storages and backups
 
-Storage layout (including the `backup` target) and the full backup
-strategy live in **`docs/backups.md`**.
+Storage layout (including the `backup` target), **the physical disks
+attached to the PVE host (sda/sdb/sdc — what's mounted, what's
+retired, what's reserved for shared media)**, and the full backup
+strategy all live in **`docs/backups.md`** → `## Proxmox host` →
+`### Physical disks`.
 
 
 ## LXCs as code (bpg/proxmox, data-driven from YAML)

@@ -141,6 +141,72 @@ repo's tofu — it's a manual install (`docs/setup-from-scratch.md`
 Phase 0). Tofu drives the LXCs that live on it, not the host itself.
 That means the host has its own backup story, separate from `vzdump`.
 
+### Physical disks (current PVE host: `pve03` / Beelink)
+
+The authoritative source: `ssh root@<pve> lsblk -o NAME,SIZE,TYPE,ROTA,MODEL,MOUNTPOINT,FSTYPE,LABEL`.
+This table reflects state as of 2026-06; **re-run lsblk before assuming
+anything** (operators add/remove disks without updating docs).
+
+| Device | Size | Type | Model | Where it's mounted | What it's for |
+|---|---|---|---|---|---|
+| **`sda`** | 477 GB | NVMe SSD (internal) | "512GB SSD" (M.2) | `pve` LVM VG (root + swap + thin pool) | **System disk** — PVE itself + all LXC volumes (`local-lvm`). Do not touch outside of provisioning. |
+| **`sdb`** | 1.8 TB | SATA HDD via USB (SMR — Seagate ST2000LM007) | "Generic" / ST2000LM007 | **NOT MOUNTED** (no fstab entry, no `pvesm` definition) | **Retired** as backup target — UAS + SMR caused journal aborts under sustained writes. Partition `sdb1` still carries a stale `backup` label (don't be misled). Available for repurposing — currently the candidate for shared media (in progress, see "Planned" below). |
+| **`sdc`** | 466 GB | SATA SSD via USB (Samsung 860 EVO) | "SSD 860 EVO" | `/mnt/pve/backup` (ext4, label `data`) | **Active backup target** — PVE storage `backup`. Receives `vzdump` daily tarballs + ISO/template uploads. `rotational=1` is the USB enclosure misreporting; the device is an SSD. |
+
+#### sda (system) — LVM layout under `pve` VG
+
+```
+pve-swap            8 GB  → [SWAP]
+pve-root           96 GB  → /
+pve-data        349 GB  → thin pool (local-lvm), holds:
+  vm-101-disk-0    10 GB   ops LXC rootfs
+  vm-102-disk-0     2 GB   adguard rootfs
+  vm-103-disk-0     4 GB   gateway rootfs
+  vm-104-disk-0     8 GB   navidrome rootfs
+  vm-104-disk-1    50 GB   navidrome music mp0 (backup=0)
+  vm-200-disk-0    60 GB   coolify rootfs
+  vm-210-disk-0    30 GB   coolify-runner-01 rootfs
+```
+
+Thin pool usage: ~17 GB / 349 GB (~5%). Plenty of headroom for now;
+review before adding more LXCs or larger mount points.
+
+#### sdb (retired HDD) — careful, NOT free
+
+- Filesystem: `ext4` on `sdb1`, label `backup` (left over from when it
+  was the vzdump target — predates `sdc`).
+- NOT in `/etc/fstab`. NOT in `pvesm status`. Not mounted at boot.
+- Spins up if probed but the SMR + USB-UAS combo makes it unsuitable
+  for write-heavy workloads (random writes stall, journal aborts under
+  sustained load).
+- **For agents/operators:** do NOT assume this disk is "free to use as
+  anything". Repurposing for shared media is the current plan but
+  hasn't been executed yet — confirm with the operator before
+  formatting / re-purposing / scripting against it.
+
+#### sdc (active backup target)
+
+- Filesystem: `ext4` on `sdc1`, label `data`, UUID
+  `ee9d1607-c72a-4a0a-8cfa-d4152d6ad52b`.
+- fstab: `nofail,noatime,x-systemd.device-timeout=10s` so a missing
+  USB drive doesn't block boot.
+- PVE storage: `backup` (`dir` type, content
+  `backup,iso,vztmpl,images,rootdir,snippets`).
+- Usage today: ~8 GB / 480 GB (~1.7%).
+
+#### Planned / in progress
+
+- **Shared media disk** — operator is provisioning a separate mount
+  for shared media (FLAC library + future video / photos). Likely
+  re-purposing `sdb` (1.8 TB HDD) since SMR is acceptable for
+  sequential reads of finished media files (the journal-abort issue
+  was write-heavy backup workloads). Confirm with the operator before
+  documenting paths / mount options / which LXCs bind into it.
+- When mounted, update this section with: device + filesystem +
+  mountpoint + which LXC(s) bind into it + whether `vzdump` should
+  see it (almost certainly `backup=0` — same as
+  `/var/lib/navidrome/music`).
+
 ### What lives on the host that matters (and isn't in any LXC)
 
 ```
