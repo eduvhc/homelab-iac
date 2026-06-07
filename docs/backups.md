@@ -255,8 +255,8 @@ systemctl start authelia
 AdGuard's state is split:
 - `AdGuardHome.yaml` — DNS settings, rewrites, filter URLs, users.
   Already declarative: `services/adguard/AdGuardHome.yaml.tmpl` is
-  rendered by `sync.sh` from sops on every apply. vzdump captures the
-  rendered file; git has the source.
+  rendered by the sync engine (`services/adguard/sync.yaml`) on every
+  apply. vzdump captures the rendered file; git has the source.
 - `data/stats.db` — months of DNS query history, blocked counts, top
   domains. **BoltDB** (not SQLite).
 - `data/sessions.db` — login sessions, ephemeral.
@@ -302,7 +302,7 @@ file inside is recovered as-is, BoltDB handles the rest on next open.
 ### Caddy / cloudflared / coolify-runner-01 — no state to inner-back
 
 - **Caddy** (on gateway LXC) reads `/etc/caddy/Caddyfile`, rendered by
-  `services/gateway/caddy/sync.sh` from this repo. No DB.
+  the sync engine from `services/gateway/caddy/sync.yaml`. No DB.
 - **cloudflared** connectors on Coolify + runner LXCs are stateless;
   the tunnel token comes from sops + tofu. No DB.
 - **coolify-runner-01** is a pure Docker host with no own state. Apps

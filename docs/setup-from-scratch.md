@@ -302,14 +302,19 @@ in **`docs/backups.md`**. Do everything backup-related from there.
 | Add a new LXC | `network/ips.yaml` + `services/<new>/lxc.yaml` | `tofu apply` in `iac/stacks/infra` |
 | Add a CF tunnel route | `services/<svc>/tunnel-routes.yaml` | `tofu apply` in `iac/stacks/infra` |
 | Add a runner | new `services/coolify-runner-NN/` + `iac/stacks/platform/runner.tf` | `tofu apply` in `iac/stacks/platform` |
-| AdGuard rewrites/filters | `services/adguard/AdGuardHome.yaml.tmpl` | `services/adguard/sync.sh` |
-| Authelia OIDC client | `services/gateway/authelia/configuration.yml.tmpl` | `services/gateway/authelia/sync.sh` |
-| Caddy reverse proxy entry | `services/gateway/caddy/Caddyfile.tmpl` | `services/gateway/caddy/sync.sh` |
+| AdGuard rewrites/filters | `services/adguard/AdGuardHome.yaml.tmpl` | sync engine (`services/adguard/sync.yaml`) |
+| Authelia OIDC client | `services/gateway/authelia/configuration.yml.tmpl` | `services/gateway/authelia/sync.sh` (hybrid: hash + engine) |
+| Caddy reverse proxy entry | `services/gateway/caddy/Caddyfile.tmpl` | sync engine (`services/gateway/caddy/sync.yaml`) |
+| Navidrome config | `services/navidrome/navidrome.toml.tmpl` | sync engine (`services/navidrome/sync.yaml`) |
 | Add/edit a cron job | `services/<svc>/cron.yaml` (or `iac/cron.yaml` if IaC-wide) | `tools/apply.sh` (phase 8 reconciles) |
+| Add a backup | `services/<svc>/backups.yaml` | `tools/apply.sh` (phase 8 reconciles) |
 | Add / rotate a secret | `sops iac/secrets.sops.yaml` (or `FORCE=1 services/coolify/rotate-token.sh` for Coolify) | commit + push the encrypted file |
 
-All `sync.sh` and bootstrap scripts are idempotent (sha256 diff before
-scp+restart). Re-running them when nothing changed is a no-op.
+The **sync engine** (`tools/lib/sync`, Go binary) reads each
+`services/<svc>/sync.yaml` and converges the target LXC to the declared
+file/restart state. Idempotent — sha256-diffs before push, restarts only
+on change. Bootstrap scripts are likewise idempotent. Re-running when
+nothing changed is a no-op.
 
 ## Recovery scenarios
 
