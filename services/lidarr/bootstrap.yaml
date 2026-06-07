@@ -102,6 +102,10 @@ commands:
       unzip -q -o /tmp/tubifarry.zip -d /var/lib/lidarr/plugins/TypNull/Tubifarry
       chown -R lidarr:lidarr /var/lib/lidarr/plugins
       rm -f /tmp/tubifarry.zip
+      # Lidarr loads plugins only at startup — bounce the service if it's
+      # already up (first-install case: unit not yet present, skip
+      # silently). try-restart is a no-op when inactive.
+      systemctl try-restart lidarr.service 2>/dev/null || true
 
   # slskd install — single binary in a zip.
   - if_missing_file: /opt/slskd/slskd
