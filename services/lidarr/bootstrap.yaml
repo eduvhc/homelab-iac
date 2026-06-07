@@ -35,6 +35,10 @@ users:
   - {name: slskd,  system: true, no_create_home: true, shell: /usr/sbin/nologin, home: /var/lib/slskd,  extra_groups: [media]}
 
 dirs:
+  # /etc/lidarr is empty by design but kept around because the systemd
+  # unit's ProtectSystem=strict + ReadWritePaths= references it. Lidarr
+  # itself reads/writes config + DB in -data=/var/lib/lidarr (see the
+  # config.xml seed below, NOT /etc/lidarr/config.xml).
   - {path: /etc/lidarr,      owner: "lidarr:lidarr", mode: "0750"}
   - {path: /var/lib/lidarr,  owner: "lidarr:lidarr", mode: "0750"}
   - {path: /etc/slskd,       owner: "slskd:slskd",   mode: "0750"}
@@ -90,13 +94,29 @@ commands:
       chmod 0755 /opt/slskd/slskd
       chown -R slskd:slskd /opt/slskd
 
-  # Seed Lidarr's config.xml with our pre-generated API key. Lidarr will
-  # honor the existing ApiKey on first launch (otherwise it generates one
-  # we can't predict, breaking any scripts that talk to Lidarr's API).
-  # printf instead of heredoc — the bootstrap engine indents the entire
-  # shell block by 2 spaces, which would push a heredoc's closing token
-  # off column 0 and break termination.
-  - if_missing_file: /etc/lidarr/config.xml
+  # Seed Lidarr's config.xml at the path Lidarr ACTUALLY reads — its
+  # -data=/var/lib/lidarr arg in lidarr.service. (Earlier iteration seeded
+  # /etc/lidarr/config.xml; Lidarr ignored it and generated its own with
+  # AuthenticationMethod=None, which triggered the first-run wizard.)
+  #
+  # Why pre-seed: locks in
+  #   - <AuthenticationMethod>External</AuthenticationMethod> — Authelia at
+  #     the gateway is the gate; Lidarr's "External" mode is literally a
+  #     no-op handler (verified at NoAuthenticationHandler.cs:23).
+  #   - <AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>
+  #     — Tubifarry talks to slskd via 127.0.0.1; bypassing the external
+  #     gate for local requests keeps in-LXC plumbing simple.
+  #   - <Branch>nightly</Branch> — plugin support requires nightly; without
+  #     this Lidarr would self-update to master on first auto-update check
+  #     and break Tubifarry.
+  #   - <ApiKey>...</ApiKey> — predictable key for any future scripting
+  #     against Lidarr's API (Tubifarry uses Lidarr internals, not the
+  #     external API, so this isn't strictly required today).
+  #
+  # printf '%s\n' instead of heredoc — the bootstrap engine indents the
+  # entire shell block by 2 spaces, which would push a heredoc's closing
+  # token off column 0 and break termination.
+  - if_missing_file: /var/lib/lidarr/config.xml
     shell: |
       . /etc/lidarr-stack/secrets.env
       printf '%s\n' \
@@ -114,9 +134,9 @@ commands:
         '  <SslCertPassword></SslCertPassword>' \
         '  <UrlBase></UrlBase>' \
         '  <InstanceName>Lidarr</InstanceName>' \
-        '</Config>' > /etc/lidarr/config.xml
-      chown lidarr:lidarr /etc/lidarr/config.xml
-      chmod 0640 /etc/lidarr/config.xml
+        '</Config>' > /var/lib/lidarr/config.xml
+      chown lidarr:lidarr /var/lib/lidarr/config.xml
+      chmod 0640 /var/lib/lidarr/config.xml
 
 systemd:
   daemon_reload: true
