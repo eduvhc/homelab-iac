@@ -9,6 +9,10 @@ User=lidarr
 Group=lidarr
 SupplementaryGroups=media
 WorkingDirectory=/var/lib/lidarr
+# umask 0002 — Lidarr-created subdirs (Artist/Album folders) and imported
+# files stay group-writable so Navidrome / future companion services in
+# the media group can rescan/touch them without root help.
+UMask=0002
 ExecStart=/opt/Lidarr/Lidarr -nobrowser -data=/var/lib/lidarr
 Restart=on-failure
 RestartSec=10

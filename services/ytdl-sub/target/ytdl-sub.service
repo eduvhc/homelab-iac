@@ -11,6 +11,9 @@ SupplementaryGroups=media
 WorkingDirectory=/var/lib/ytdl-sub
 Environment=HOME=/var/lib/ytdl-sub
 Environment=XDG_DATA_HOME=/var/lib/ytdl-sub/.local/share
+# umask 0002 — see services/lidarr/target/slskd.service for rationale
+# (group-write so any service in the `media` group can rescan/touch).
+UMask=0002
 # The subscriptions file is the entire UI of this service. Edit at
 # /etc/ytdl-sub/subscriptions.yaml (synced from the repo).
 ExecStart=/var/lib/ytdl-sub/.local/bin/ytdl-sub sub /etc/ytdl-sub/subscriptions.yaml

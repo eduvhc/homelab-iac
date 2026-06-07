@@ -15,6 +15,12 @@ WorkingDirectory=/var/lib/slskd
 EnvironmentFile=/etc/lidarr-stack/secrets.env
 Environment=SLSKD_APP_DIR=/var/lib/slskd
 Environment=SLSKD_CONFIG=/etc/slskd/slskd.yml
+# umask 0002 → dirs created 2775, files 0664. Critical so Lidarr (in the
+# media supplementary group) can rename files out of /srv/media/_incoming/
+# into /srv/media/music/ during import. Without this, slskd's default
+# umask 0022 yields 2755 dirs (no group write) and Lidarr import silently
+# fails with "Couldn't import track".
+UMask=0002
 ExecStart=/opt/slskd/slskd
 Restart=on-failure
 RestartSec=10
