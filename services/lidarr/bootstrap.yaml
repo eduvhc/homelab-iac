@@ -39,9 +39,14 @@ dirs:
   - {path: /var/lib/lidarr,  owner: "lidarr:lidarr", mode: "0750"}
   - {path: /etc/slskd,       owner: "slskd:slskd",   mode: "0750"}
   - {path: /var/lib/slskd,   owner: "slskd:slskd",   mode: "0750"}
-  # Shared downloads dir: slskd writes here, Lidarr (Tubifarry's import
-  # path) renames into /srv/media/music. Same FS → renames are atomic.
-  - {path: /srv/media/_incoming, owner: "slskd:media", mode: "2775"}
+  # /srv/media/_incoming is the slskd downloads dir — Lidarr (Tubifarry's
+  # import path) renames into /srv/media/music from here (same FS → atomic).
+  # NOT created here: it's a sibling of /srv/media/{music,youtube} which
+  # live on the host bind-mount and must be pre-created host-side with
+  # `100000:165000 mode 2775` (container `root:media`). See
+  # docs/media-stack.md → "Host setup". `install -d` from inside the
+  # unprivileged LXC can't create here (container root = host UID 100000
+  # has no write perm on /srv/media owned by host root:root 0755).
 
 # Local random secrets — never leave the LXC. slskd reads its API + JWT
 # keys at runtime via EnvironmentFile=. LIDARR_API_KEY seeds config.xml
