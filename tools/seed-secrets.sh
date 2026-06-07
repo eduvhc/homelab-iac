@@ -23,7 +23,7 @@
 #   TOFU_STATE_PASSPHRASE                   ← random, generated here
 #   R2_ACCOUNT_ID                           ← derived from HOMELAB_DOMAIN
 #   R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY  ← this script (CF API mint)
-#   COOLIFY_API_TOKEN                       ← services/coolify/scripts/rotate-token.sh
+#   COOLIFY_API_TOKEN                       ← services/coolify/ops/rotate-token.sh
 #
 # Pre-reqs:
 #   - sops + age on PATH; age private key at ~/.config/sops/age/keys.txt

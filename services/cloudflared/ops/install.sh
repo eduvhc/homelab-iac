@@ -5,7 +5,7 @@
 # argv where `ps` could see it.
 #
 # Run remotely:
-#   ssh root@HOST "TUNNEL_TOKEN=... sh -s" < services/cloudflared/scripts/install.sh
+#   ssh root@HOST "TUNNEL_TOKEN=... sh -s" < services/cloudflared/ops/install.sh
 #
 # Re-running is safe: package install is a no-op when present, token file is
 # overwritten only if changed, and the service is reloaded only when needed.

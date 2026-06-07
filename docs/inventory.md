@@ -93,22 +93,26 @@ These are the rough edges to know.
 
 ### Standard layout per service
 
-Every `services/<svc>/` follows the same shape:
+Every `services/<svc>/` follows the same shape. Folder names describe
+**role**, not file shape — so the model holds when new file types arrive
+(migrations, assets, hooks, etc.).
 
 ```
 services/<svc>/
 ├── *.yaml             ← manifests (control plane: lxc, sync, backups,
 │                       cron, tunnel-routes) — discovered by tofu/Go
 │                       assemblers via fileset/glob
-├── config/            ← templates + static files pushed to the LXC
-│                       (rendered by the sync engine; src paths in
-│                       sync.yaml are relative to the service dir)
-└── scripts/           ← shell (bootstrap, hybrid sync wrappers, installers)
-                        — invoked from tools/apply.sh
+├── target/            ← anything that ends up ON the LXC
+│                       (config templates, systemd units, future
+│                       migrations / assets / fixtures / on-target hooks)
+│                       Rendered/pushed by the sync engine — src paths
+│                       in sync.yaml are relative to the service dir.
+└── ops/               ← scripts run BY operator or apply.sh
+                        (bootstrap, hybrid sync, installers, rotaters)
 ```
 
 Sub-services (e.g. `services/gateway/{authelia,caddy}/`) follow the same
-recursive shape: their own `*.yaml` + `config/` + `scripts/`.
+recursive shape: their own `*.yaml` + `target/` + `ops/`.
 
 ### Adding a new LXC
 
@@ -145,7 +149,7 @@ mount_points:
 cd iac/stacks/infra && tofu apply
 ```
 
-Bootstrap stays manual per service. Create `services/grafana/scripts/bootstrap.sh`
+Bootstrap stays manual per service. Create `services/grafana/ops/bootstrap.sh`
 and have `tools/apply.sh` (or a one-off ssh) run it after the LXC is up.
 
 ### Adding a tunnel route for the new LXC

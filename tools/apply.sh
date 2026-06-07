@@ -98,21 +98,21 @@ done
 log_step "3/8" "bootstrap service LXCs"
 
 log_info "adguard ($IP_ADGUARD): install AGH binary"
-ssh root@"$IP_ADGUARD" 'sh -s' < "$REPO_ROOT/services/adguard/scripts/bootstrap.sh"
+ssh root@"$IP_ADGUARD" 'sh -s' < "$REPO_ROOT/services/adguard/ops/bootstrap.sh"
 sync_service adguard
 
 log_info "gateway ($IP_GATEWAY): install Caddy + Authelia + generate OIDC keys"
-ssh root@"$IP_GATEWAY" 'sh -s' < "$REPO_ROOT/services/gateway/scripts/bootstrap.sh"
+ssh root@"$IP_GATEWAY" 'sh -s' < "$REPO_ROOT/services/gateway/ops/bootstrap.sh"
 # authelia/sync.sh is hybrid: argon2id hash logic in shell, file render+push
 # delegated to the sync engine via services/gateway/authelia/sync.yaml.
-[ -x "$REPO_ROOT/services/gateway/authelia/scripts/sync.sh" ] && "$REPO_ROOT/services/gateway/authelia/scripts/sync.sh"
+[ -x "$REPO_ROOT/services/gateway/authelia/ops/sync.sh" ] && "$REPO_ROOT/services/gateway/authelia/ops/sync.sh"
 sync_service gateway/caddy
 
 log_info "coolify-runner-01 ($IP_RUNNER): install Docker"
 ssh root@"$IP_RUNNER" 'sh -s' < "$REPO_ROOT/services/coolify-runner-01/scripts/bootstrap.sh"
 
 log_info "navidrome ($IP_NAVIDROME): install Navidrome binary"
-ssh root@"$IP_NAVIDROME" 'sh -s' < "$REPO_ROOT/services/navidrome/scripts/bootstrap.sh"
+ssh root@"$IP_NAVIDROME" 'sh -s' < "$REPO_ROOT/services/navidrome/ops/bootstrap.sh"
 sync_service navidrome
 
 # ── 4. Cloudflared HA pair ──────────────────────────────────────────────────
@@ -122,14 +122,14 @@ TUNNEL_TOKEN=$(cd "$INFRA_DIR" && tofu output -raw tunnel_token)
 for host in "$IP_COOLIFY" "$IP_RUNNER"; do
   log_info "cloudflared on $host"
   ssh root@"$host" "TUNNEL_TOKEN=$TUNNEL_TOKEN sh -s" \
-    < "$REPO_ROOT/services/cloudflared/scripts/install.sh"
+    < "$REPO_ROOT/services/cloudflared/ops/install.sh"
 done
 
 # ── 5. Coolify (split into 3 idempotent steps for SRP) ──────────────────────
 log_step "5/8" "bootstrap Coolify"
-COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/scripts/install.sh"
-COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/scripts/bootstrap-user.sh"
-COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/scripts/rotate-token.sh"
+COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/ops/install.sh"
+COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/ops/bootstrap-user.sh"
+COOLIFY_HOST="$IP_COOLIFY" "$REPO_ROOT/services/coolify/ops/rotate-token.sh"
 
 # rotate-token.sh wrote a new COOLIFY_API_TOKEN to sops, but it ran in its
 # own subshell — its `export` doesn't reach us. Re-export from sops so the

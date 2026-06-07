@@ -65,5 +65,5 @@ systemctl daemon-reload
 systemctl enable caddy >/dev/null 2>&1
 systemctl enable authelia >/dev/null 2>&1 || true
 echo "==> gateway bootstrap complete. Now push configs:"
-echo "    services/gateway/authelia/scripts/sync.sh (hybrid hash + sync engine)"
+echo "    services/gateway/authelia/ops/sync.sh (hybrid hash + sync engine)"
 echo "    sync_service gateway/caddy (or tools/apply.sh)"
