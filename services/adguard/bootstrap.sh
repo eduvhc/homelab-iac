@@ -4,14 +4,16 @@
 # Configuration is then pushed via sync.sh.
 set -e
 
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+# sqlite3 is needed by services/adguard/backup-sqlite.sh (online .backup
+# of stats.db via the SQLite Backup API).
+apt-get install -y -qq curl ca-certificates nftables python3-yaml sqlite3
+
 if [ -x /opt/AdGuardHome/AdGuardHome ]; then
   echo "AdGuardHome already installed"
   exit 0
 fi
-
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq curl ca-certificates nftables python3-yaml
 
 # Official install script — clean, idempotent, downloads latest stable
 curl -fsSL https://raw.githubusercontent.com/AdguardTeam/AdGuardHome/master/scripts/install.sh -o /tmp/install.sh

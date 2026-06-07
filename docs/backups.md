@@ -131,6 +131,23 @@ ls -lh /mnt/pve/backup/dump/vzdump-lxc-104-*.tar.zst
 # Should be ~rootfs size (≤8GB compressed), NOT rootfs + music
 ```
 
+## Coverage matrix
+
+Quick reference of what every LXC contributes to the backup story:
+
+| LXC                   | Inner backup script                                | Engine     | What it captures                       |
+|---|---|---|---|
+| coolify (200)         | `services/coolify/backup-postgres.sh`              | pg_dump    | Coolify source DB (projects, deploys)  |
+| gateway (103)         | `services/gateway/authelia/backup-sqlite.sh`       | sqlite3    | Authelia DB (TOTP, sessions, audit)    |
+| navidrome (104)       | `services/navidrome/backup-sqlite.sh`              | sqlite3    | Navidrome DB (users, ratings, scrobbles) |
+| adguard (102)         | `services/adguard/backup-sqlite.sh`                | sqlite3    | AdGuard stats.db (DNS history)         |
+| coolify-runner-01 (210) | —                                                | —          | Pure Docker host; per-app future       |
+| ops (101)             | —                                                  | —          | Rootfs covered by vzdump               |
+
+All scripts run from ops at 02:50 UTC and write to the target LXC's
+rootfs so the 03:00 vzdump captures them. Add a new service = add a new
+row. Per-service details follow.
+
 ## Per-service exceptions
 
 ### Navidrome — sqlite3 .backup of the SQLite DB + vzdump
@@ -242,32 +259,59 @@ chown authelia:authelia /var/lib/authelia/db.sqlite3
 systemctl start authelia
 ```
 
-### AdGuard — vzdump only (deliberate skip)
+### AdGuard — sqlite3 .backup of stats.db + vzdump
 
-AdGuard's meaningful state is split:
+AdGuard's state is split:
 - `AdGuardHome.yaml` — DNS settings, rewrites, filter URLs, users.
   Already declarative: `services/adguard/AdGuardHome.yaml.tmpl` is
-  rendered by `sync.sh` from sops on every apply. Source of truth is
-  this repo.
-- `data/sessions.db` — login sessions, regenerated on user login.
-- `data/stats.db` — DNS query stats over time. Nice to keep but
-  reproducible from new queries.
-- `data/filters/` — re-downloaded from upstream URLs on schedule.
+  rendered by `sync.sh` from sops on every apply. vzdump captures the
+  rendered file; git has the source.
+- `data/stats.db` — months of DNS query history, blocked counts, top
+  domains. **Not trivially reproducible.** Backed up.
+- `data/sessions.db` — login sessions, ephemeral; skipped.
+- `data/filters/` — re-downloaded from upstream URLs; skipped.
 
-What matters (the YAML) is in git. The rest is ephemeral. **No inner
-backup is added** — vzdump captures the data dir well enough for the
-stats history, and a full disaster restore reconstructs AdGuard from
-`sync.sh` + sops anyway.
+```
+services/adguard/backup-sqlite.sh    runs from ops
+  └─ uses tools/backups/lib/sqlite.sh    sqlite3 .backup + PRAGMA integrity_check
+  └─ uses tools/backups/lib/retention.sh keep-last-N rotation
+  └─ scheduled in services/adguard/cron.yaml at 02:50 UTC
 
-If we ever turn on AdGuard's DHCP server (`leases.db` would matter for
-client name → IP history), revisit this decision.
+Output: root@adguard:/var/lib/adguard/backups/adguard-stats-<UTC-ts>.sqlite3
+Retention: keep last 14 dumps
+```
 
-### Caddy gateway / Coolify runner — no state worth inner-backing
+**Restore stats history**:
+```bash
+# On the AdGuard LXC
+systemctl stop AdGuardHome
+LATEST=$(ls -t /var/lib/adguard/backups/adguard-stats-*.sqlite3 | head -1)
+cp "$LATEST" /opt/AdGuardHome/data/stats.db
+chmod 600 /opt/AdGuardHome/data/stats.db
+systemctl start AdGuardHome
+```
 
-Caddy reads its config from `/etc/caddy/Caddyfile`, which is declarative
-(rendered by `services/gateway/caddy/sync.sh`). The runner is a Docker
-host — its state lives inside the containers it runs (covered above per
-service). Neither has a database to dump.
+### Caddy / cloudflared / coolify-runner-01 — no state to inner-back
+
+- **Caddy** (on gateway LXC) reads `/etc/caddy/Caddyfile`, rendered by
+  `services/gateway/caddy/sync.sh` from this repo. No DB.
+- **cloudflared** connectors on Coolify + runner LXCs are stateless;
+  the tunnel token comes from sops + tofu. No DB.
+- **coolify-runner-01** is a pure Docker host with no own state. Apps
+  deployed via Coolify will have their own data (volumes, DBs); when
+  apps are deployed, each one should get its own backup script under
+  its app repo — same pattern as services here.
+
+### ops LXC (101) — covered by vzdump
+
+The ops LXC holds the git checkout, the SSH key it uses to reach every
+other LXC, and the age private key that decrypts `secrets.sops.yaml`.
+All three live on rootfs and are captured by vzdump. The git checkout
+is trivially recreatable; the SSH key is also installed on PVE; the
+age key is the operator's responsibility to also keep off-host (a copy
+in your password manager — see "Restore secrets").
+
+No inner backup script for ops itself.
 
 ## Inner backup pattern (`tools/backups/`)
 
