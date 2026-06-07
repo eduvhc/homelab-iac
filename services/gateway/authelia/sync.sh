@@ -67,7 +67,7 @@ CONFIG_CHANGED=0
 UNIT_CHANGED=0
 for f in configuration.yml users_database.yml; do
   if needs_push "$RENDER_DIR/$f" "/etc/authelia/$f"; then
-    scp -q "$RENDER_DIR/$f" "$HOST:/etc/authelia/$f"
+    atomic_push "$RENDER_DIR/$f" "/etc/authelia/$f"
     CONFIG_CHANGED=1
   fi
 done
