@@ -1,7 +1,11 @@
 # Cron entries owned by the coolify service. Assembled into /etc/cron.d/iac
 # on the ops LXC by tools/lib/assemble-crons (called by apply.sh phase 8).
-#
-# (Currently empty — Coolify API token rotation is now operator-driven via
-# `services/coolify/rotate-token.sh`, since it edits iac/secrets.sops.yaml
-# and the change must be committed + pushed by a human, not a cron.)
-[]
+
+- name: coolify-backup-postgres
+  schedule: "50 2 * * *"       # daily 02:50 UTC — 10 min before vzdump's 03:00
+  command: services/coolify/backup-postgres.sh
+  log: /var/log/coolify-backup-postgres.log
+  description: |
+    Inner backup of Coolify's source Postgres DB. pg_dump --format=custom
+    into /data/coolify/backups/source/ on the Coolify LXC (captured by
+    next vzdump). Retention: keep last 14 dumps. See docs/backups.md.

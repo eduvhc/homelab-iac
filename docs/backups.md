@@ -164,16 +164,107 @@ sqlite3 /var/lib/navidrome/navidrome.db ".restore /var/lib/navidrome/backups/nav
 systemctl start navidrome
 ```
 
-### Coolify — app data lives inside the LXC
+### Coolify — pg_dump of the source DB + vzdump
 
-Coolify apps store data in Docker volumes inside the LXC (200). The
-LXC's vzdump covers them. There's no per-app backup config in this repo
-— if a specific deployed app needs more aggressive backups (off-host),
-that's app-level work (e.g. a sidecar that ships dumps to R2).
+Coolify's own state (projects, server records, environment variables,
+deploy history, OIDC clients, …) lives in a Postgres container named
+`coolify-db` inside the LXC 200. A filesystem-level vzdump snapshot
+captures the data files but doesn't produce a logically-consistent
+dump — Postgres recovery on restore is fine in theory, but a clean
+`pg_dump` is strictly better for selective restores and migrations.
+
+We dump it ourselves via cron:
+
+```
+services/coolify/backup-postgres.sh    runs from ops
+  └─ uses tools/backups/lib/postgres.sh   pg_dump in container helper
+  └─ uses tools/backups/lib/retention.sh  keep-last-N rotation
+  └─ scheduled in services/coolify/cron.yaml at 02:50 UTC (10 min before vzdump)
+
+Output: root@coolify:/data/coolify/backups/source/coolify-source-<UTC-ts>.dmp
+Format: pg_dump --format=custom --no-acl --no-owner
+Retention: keep last 14 dumps (matches vzdump window)
+```
+
+The dumps live on the Coolify LXC's rootfs, so vzdump captures them at
+03:00. Net effect: **two independent snapshots of the source DB per day**
+at different layers (logical dump + filesystem snapshot).
+
+We deliberately do NOT use Coolify's own "Backups" UI/scheduler. See the
+"Inner backup pattern" section below for why.
+
+**Restore the source DB only** (no LXC recreate):
+```bash
+# On the Coolify host
+LATEST=$(ls -t /data/coolify/backups/source/coolify-source-*.dmp | head -1)
+docker exec -i coolify-db pg_restore --clean --if-exists -U coolify -d coolify < "$LATEST"
+docker restart coolify
+```
+
+**Deployed apps' data** (Docker volumes of apps you deploy via Coolify):
+covered by the LXC's vzdump only. If a specific deployed app needs more
+aggressive or off-host backups, that's app-level work (e.g. a sidecar
+that ships dumps to R2).
 
 ### AdGuard / gateway / runner — pure state, all in rootfs
 
 No special handling. The vzdump captures everything.
+
+## Inner backup pattern (`tools/backups/`)
+
+"Inner" backups = per-app database dumps (pg_dump, sqlite3 .backup, …)
+that complement the host-level vzdump snapshot. Triggered by cron from
+ops, they write their output **on the target LXC's rootfs** so vzdump
+captures the dump alongside the rest of the LXC.
+
+### Layout
+
+```
+tools/backups/
+└── lib/
+    ├── postgres.sh        pg_dump_in_container HOST CONTAINER USER DB DEST_DIR LABEL
+    └── retention.sh       rotate_keep_last HOST DIR PATTERN KEEP
+
+services/<svc>/
+├── backup-<engine>.sh     thin orchestrator — sources lib, supplies args
+└── cron.yaml              schedules it (10 min before vzdump's 03:00)
+```
+
+Engine helpers under `tools/backups/lib/` are reusable across services
+(any Postgres-backed service uses the same `postgres.sh`). The
+per-service script knows host + container + DB + destination; the lib
+does the work.
+
+### Why not the app's own scheduler?
+
+Same reasoning as the rest of this repo's IaC-vs-UI stance:
+
+- **Declarative**: schedule + retention + format live in git, visible
+  at review time, not buried in app DB rows.
+- **Uniform restore mental model** across services, regardless of what
+  each app's native UI calls things.
+- **Survives upgrades**: app schema changes can break their native
+  backup config. A `docker exec ... pg_dump` is stable across versions.
+- **Observable**: cron output goes to a known log file; failures show
+  up in the same channel as drift checks.
+
+Trade-off: no "Backups" tab in the app UI. Acceptable — this homelab
+is IaC-driven.
+
+Navidrome's native `[Backup]` block is the exception, kept because it's
+a 4-line freebie that ships with the app and SQLite single-file backups
+are trivial. Strictly redundant given vzdump, but costs nothing.
+
+### Adding inner backups for a new service
+
+1. Pick the engine (postgres, sqlite, mysql, …); source the matching
+   `tools/backups/lib/<engine>.sh`. If the engine doesn't exist yet,
+   add it under `tools/backups/lib/` first.
+2. Create `services/<svc>/backup-<engine>.sh` — supply host, container,
+   user, database name, destination dir, label.
+3. Add a cron entry to `services/<svc>/cron.yaml` (10 min before 03:00).
+4. Update this doc's "Per-service exceptions" with the new entry + the
+   restore command for that engine.
 
 ## Restore procedures
 
