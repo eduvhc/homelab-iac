@@ -1,0 +1,23 @@
+# Service-scoped cron jobs for the lidarr LXC. Assembled into the central
+# /etc/cron.d/iac on ops by tools/lib/cmd/assemble-crons.
+#
+# The single entry here works around a deliberate gap in Lidarr: there is
+# no built-in "search for missing albums" scheduled task (run `curl
+# /api/v1/system/task` to see — only RSS Sync exists, and RSS only finds
+# new releases). On Soulseek the import success rate per album-search is
+# unreliable (peers go offline mid-download, queues fill up, files error
+# out) — so albums that came back as `0 reports downloaded` or whose
+# tracks errored need a periodic re-try to converge.
+#
+# This cron fires AlbumSearch for every monitored album with an
+# incomplete trackFileCount. Idempotent — Lidarr's DownloadDecisionMaker
+# rejects already-grabbed releases at the queue level, so re-firing
+# costs nothing when nothing's missing.
+
+- name: lidarr-missing-search
+  schedule: "17 5 * * *"        # daily at 05:17 UTC
+  command: services/lidarr/ops/search-missing.sh
+  log: /var/log/lidarr-missing-search.log
+  description: |
+    Re-search missing albums via /api/v1/command. Catches stuck Soulseek
+    downloads + albums where the first search returned no usable releases.
